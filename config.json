@@ -1,0 +1,78 @@
+{
+    "types": [
+        "Payment",
+        "Receipt",
+        "Opening Balance"
+    ],
+    "source_types": [
+        "Payment Voucher",
+        "E-Learning Revenue Report",
+        "TallyPrime Integrated Mobile Solution Revenue Report",
+        "Receipt Voucher"
+    ],
+    "ledgers": [
+        "Salaries and Wages",
+        "Electricity",
+        "Office Rent",
+        "Office Maintenance",
+        "Fuel and Lubricant",
+        "Repairs of Office Equipment",
+        "Stationery and Printing",
+        "Communication",
+        "Insurance Premium",
+        "E-Learning Platform Annual Subscription",
+        "Web Hosting Services Annual Subscription",
+        "MTN FiberX Annual Subscription",
+        "Google AI Pro Annual Subscription",
+        "Furniture, Fixtures and Fittings",
+        "Computer and IT Equipment",
+        "Office Equipment"
+    ],
+    "theme": "light",
+    "fin_report_categories": [
+        "Fixed Assets",
+        "Current Assets",
+        "Current Liabilities",
+        "Capital",
+        "Long-term Liabilities",
+        "Sales",
+        "Administrative Overhead",
+        "Marketing and Sales Overhead"
+    ],
+    "ledger_category_mapping": {
+        "Sales": "Operating",
+        "Purchases": "Operating",
+        "Expenses": "Operating",
+        "Income": "Operating",
+        "Salaries and Wages": "Administrative Overhead",
+        "Electricity": "Administrative Overhead",
+        "Office Rent": "Administrative Overhead",
+        "Office Maintenance": "Administrative Overhead",
+        "Fuel and Lubricant": "Administrative Overhead",
+        "Repairs of Office Equipment": "Administrative Overhead",
+        "Stationery and Printing": "Administrative Overhead",
+        "Communication": "Administrative Overhead",
+        "Insurance Premium": "Administrative Overhead",
+        "E-Learning Platform Annual Subscription": "Administrative Overhead",
+        "MTN FiberX Annual Subscription": "Administrative Overhead",
+        "Google AI Pro Annual Subscription": "Administrative Overhead",
+        "Furniture, Fixtures and Fittings": "Fixed Assets",
+        "Computer and IT Equipment": "Fixed Assets",
+        "Web Hosting Services Annual Subscription": "Administrative Overhead",
+        "Office Equipment": "Fixed Assets"
+    },
+    "directories": {
+        "working_directory": "D:/Evincope/FinancialRecords/Workbooks",
+        "reports_directory": "D:/Evincope/FinancialRecords/Dashboard Reports",
+        "transactions_report_directory": "D:/Evincope/FinancialRecords/Transactions Reports",
+        "vouchers_directory": "D:/Evincope/FinancialRecords/Vouchers"
+    },
+    "company_info": {
+        "name": "Evincope Limited",
+        "address": "No. 15, Jesin Avenue, Peace Estate.\nBeside Aliko Filling Station, Jaba, Fagge, Kano State. Nigeria.",
+        "phone": "08035990431",
+        "email": "info@evincope.com",
+        "website": "www.evincope.com",
+        "logo": "D:/FilesInOneDrive/Evincope Limited Startup Artifact/Company Logo/Evincope-Black/01-Original-Transparent (Phone).png"
+    }
+}
