@@ -400,6 +400,12 @@ class App(tk.Tk):
             self.reports_tab.tree.tag_configure('evenrow', background=even_bg, foreground=text_fg)
             self.reports_tab.tree.tag_configure('oddrow', background=odd_bg, foreground=text_fg)
 
+        if hasattr(self, 'setup_lists_tab') and hasattr(self.setup_lists_tab, 'list_trees'):
+            for t in self.setup_lists_tab.list_trees:
+                t.tag_configure('evenrow', background=even_bg, foreground=text_fg)
+                t.tag_configure('oddrow', background=odd_bg, foreground=text_fg)
+
+
         # Traverse and update colors for standard widgets recursively
         self.update_widget_colors(self)
         
@@ -3225,20 +3231,25 @@ class SetupListsFrame(ttk.Frame):
         list_container.rowconfigure(0, weight=1)
         list_container.columnconfigure(0, weight=1)
         
-        # Listbox (designed to feel like a modern panel)
-        listbox = tk.Listbox(
-            list_container, 
-            selectmode="single", 
-            font=("Segoe UI", 10), 
-            bd=0, 
-            highlightthickness=0, 
-            bg=self.colors["card"], 
-            fg=self.colors["text"],
-            selectbackground=self.colors["primary"],
-            selectforeground="#ffffff"
-        )
+        # Convert Listbox to Treeview for better grid appearance
+        columns = (title,)
+        listbox = ttk.Treeview(list_container, columns=columns, show="headings", selectmode="browse")
+        listbox.heading(title, text=title, anchor="w")
+        listbox.column(title, anchor="w")
         listbox.grid(row=0, column=0, sticky="nsew")
+
+        # Configure row colors
+        theme = self.parent.config_data.get("theme", "light")
+        even_bg = "#121212" if theme == "dark" else "#f9fafb"
+        odd_bg  = "#000000" if theme == "dark" else "#ffffff"
+        text_fg = "#f9fafb" if theme == "dark" else "#1f2937"
+        listbox.tag_configure('evenrow', background=even_bg, foreground=text_fg)
+        listbox.tag_configure('oddrow', background=odd_bg, foreground=text_fg)
         
+        if not hasattr(self, 'list_trees'):
+            self.list_trees = []
+        self.list_trees.append(listbox)
+
         # Scrollbar
         scrollbar = ttk.Scrollbar(list_container, orient="vertical", command=listbox.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
@@ -3246,8 +3257,9 @@ class SetupListsFrame(ttk.Frame):
         
         # Load initial items
         items = sorted(self.parent.config_data.get(config_key, []))
-        for item in items:
-            listbox.insert(tk.END, item)
+        for idx, item in enumerate(items):
+            tag = "evenrow" if idx % 2 == 0 else "oddrow"
+            listbox.insert("", tk.END, values=(item,), tags=(tag,))
             
         # Button controls
         btn_frame = ttk.Frame(col_frame, style="TFrame")
@@ -3265,6 +3277,9 @@ class SetupListsFrame(ttk.Frame):
         btn_remove = ttk.Button(btn_frame, text="Remove", command=lambda: self.remove_item(listbox, config_key))
         btn_remove.grid(row=0, column=2, padx=(2, 0), sticky="ew")
 
+    def _get_tree_items(self, tree):
+        return [tree.item(item_id, "values")[0] for item_id in tree.get_children()]
+
     def add_item(self, listbox, config_key):
         """Prompts for a new item, inserts it, and immediately updates the JSON config file."""
         new_item = simpledialog.askstring("Add Item", f"Enter new value for {config_key.replace('_', ' ').title()}:", parent=self)
@@ -3275,55 +3290,59 @@ class SetupListsFrame(ttk.Frame):
         if not new_item:
             return
             
-        current_items = list(listbox.get(0, tk.END))
+        current_items = self._get_tree_items(listbox)
         if new_item in current_items:
             messagebox.showwarning("Duplicate", "This item already exists.", parent=self)
             return
             
         current_items.append(new_item)
         current_items.sort()
-        listbox.delete(0, tk.END)
-        for item in current_items:
-            listbox.insert(tk.END, item)
+        for item_id in listbox.get_children():
+            listbox.delete(item_id)
+        for idx, item in enumerate(current_items):
+            tag = "evenrow" if idx % 2 == 0 else "oddrow"
+            listbox.insert("", tk.END, values=(item,), tags=(tag,))
         self.parent.update_config_list(config_key, current_items)
 
     def edit_item(self, listbox, config_key):
         """Edits the selected item, updates the listbox, and writes to config.json."""
-        selected_indices = listbox.curselection()
+        selected_indices = listbox.selection()
         if not selected_indices:
             messagebox.showwarning("No Selection", "Please select an item to edit.", parent=self)
             return
 
-        idx = selected_indices[0]
-        selected_val = listbox.get(idx)
+        item_id = selected_indices[0]
+        selected_val = listbox.item(item_id, "values")[0]
 
         new_val = simpledialog.askstring("Edit Item", f"Edit value for {config_key.replace('_', ' ').title()}:", initialvalue=selected_val, parent=self)
         if not new_val or new_val.strip() == selected_val:
             return
 
         new_val = new_val.strip()
-        current_items = list(listbox.get(0, tk.END))
+        current_items = self._get_tree_items(listbox)
         if new_val in current_items:
             messagebox.showwarning("Duplicate", "This item already exists.", parent=self)
             return
 
-        current_items[idx] = new_val
+        current_items[current_items.index(selected_val)] = new_val
         current_items.sort()
-        listbox.delete(0, tk.END)
-        for item in current_items:
-            listbox.insert(tk.END, item)
+        for i_id in listbox.get_children():
+            listbox.delete(i_id)
+        for idx, item in enumerate(current_items):
+            tag = "evenrow" if idx % 2 == 0 else "oddrow"
+            listbox.insert("", tk.END, values=(item,), tags=(tag,))
         
         self.parent.update_config_list(config_key, current_items)
 
     def remove_item(self, listbox, config_key):
         """Removes the selected item, updates the listbox, and immediately writes to config.json."""
-        selected_indices = listbox.curselection()
+        selected_indices = listbox.selection()
         if not selected_indices:
             messagebox.showwarning("No Selection", "Please select an item to remove.", parent=self)
             return
             
-        idx = selected_indices[0]
-        selected_val = listbox.get(idx)
+        item_id = selected_indices[0]
+        selected_val = listbox.item(item_id, "values")[0]
         
         confirm = messagebox.askyesno(
             "Confirm Delete", 
@@ -3333,8 +3352,13 @@ class SetupListsFrame(ttk.Frame):
         if not confirm:
             return
             
-        listbox.delete(idx)
-        current_items = list(listbox.get(0, tk.END))
+        current_items = self._get_tree_items(listbox)
+        current_items.remove(selected_val)
+        for i_id in listbox.get_children():
+            listbox.delete(i_id)
+        for idx, item in enumerate(current_items):
+            tag = "evenrow" if idx % 2 == 0 else "oddrow"
+            listbox.insert("", tk.END, values=(item,), tags=(tag,))
         self.parent.update_config_list(config_key, current_items)
 
     # on_close removed as it's a frame now
@@ -3366,13 +3390,25 @@ class SetupListsFrame(ttk.Frame):
         scrollbar = ttk.Scrollbar(list_container, orient="vertical", command=tree.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         tree.config(yscrollcommand=scrollbar.set)
+        
+        if not hasattr(self, 'list_trees'):
+            self.list_trees = []
+        self.list_trees.append(tree)
+
+        theme = self.parent.config_data.get("theme", "light")
+        even_bg = "#121212" if theme == "dark" else "#f9fafb"
+        odd_bg  = "#000000" if theme == "dark" else "#ffffff"
+        text_fg = "#f9fafb" if theme == "dark" else "#1f2937"
+        tree.tag_configure('evenrow', background=even_bg, foreground=text_fg)
+        tree.tag_configure('oddrow', background=odd_bg, foreground=text_fg)
 
         # Load initial items
         ledgers = sorted(self.parent.config_data.get("ledgers", []))
         mapping = self.parent.config_data.get("ledger_category_mapping", {})
-        for ledger in ledgers:
+        for idx, ledger in enumerate(ledgers):
             cat = mapping.get(ledger, "")
-            tree.insert("", tk.END, values=(ledger, cat))
+            tag = "evenrow" if idx % 2 == 0 else "oddrow"
+            tree.insert("", tk.END, values=(ledger, cat), tags=(tag,))
 
         # Button controls
         btn_frame = ttk.Frame(col_frame, style="TFrame")
@@ -3435,9 +3471,10 @@ class SetupListsFrame(ttk.Frame):
             
             tree.delete(*tree.get_children())
             sorted_ledgers = sorted(ledgers)
-            for l in sorted_ledgers:
+            for idx, l in enumerate(sorted_ledgers):
                 c = mapping.get(l, "")
-                tree.insert("", tk.END, values=(l, c))
+                tag = "evenrow" if idx % 2 == 0 else "oddrow"
+                tree.insert("", tk.END, values=(l, c), tags=(tag,))
             dialog.destroy()
             
         btn_save = ttk.Button(main_frame, text="Save", command=on_save)
@@ -3511,9 +3548,10 @@ class SetupListsFrame(ttk.Frame):
             
             tree.delete(*tree.get_children())
             sorted_ledgers = sorted(ledgers)
-            for l in sorted_ledgers:
+            for idx, l in enumerate(sorted_ledgers):
                 c = mapping.get(l, "")
-                tree.insert("", tk.END, values=(l, c))
+                tag = "evenrow" if idx % 2 == 0 else "oddrow"
+                tree.insert("", tk.END, values=(l, c), tags=(tag,))
             dialog.destroy()
             
         btn_save = ttk.Button(main_frame, text="Save", command=on_save)
@@ -3534,8 +3572,6 @@ class SetupListsFrame(ttk.Frame):
         if not confirm:
             return
             
-        tree.delete(selected[0])
-        
         ledgers = self.parent.config_data.get("ledgers", [])
         if ledger_name in ledgers:
             ledgers.remove(ledger_name)
@@ -3548,6 +3584,13 @@ class SetupListsFrame(ttk.Frame):
         self.parent.config_data["ledger_category_mapping"] = mapping
         self.parent.save_config()
         self.parent.refresh_comboboxes()
+
+        tree.delete(*tree.get_children())
+        sorted_ledgers = sorted(ledgers)
+        for idx, l in enumerate(sorted_ledgers):
+            c = mapping.get(l, "")
+            tag = "evenrow" if idx % 2 == 0 else "oddrow"
+            tree.insert("", tk.END, values=(l, c), tags=(tag,))
 
 # =========================================================================
 # Phase 2: Transactions Report dialog and PDF layout classes
