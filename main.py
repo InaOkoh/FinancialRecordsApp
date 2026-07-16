@@ -2453,7 +2453,7 @@ class App(ctk.CTk):
         # Form Inputs Grid
         lbl_ledger = ttk.Label(card, text="Ledger Category:", style="CardLabel.TLabel")
         lbl_ledger.grid(row=0, column=0, padx=15, pady=(15, 2), sticky="w")
-        self.cb_l_ledger = ctk.CTkComboBox(card, font=("Segoe UI", 13), width=120)
+        self.cb_l_ledger = ctk.CTkComboBox(card, font=("Segoe UI", 13), width=250)
         self.cb_l_ledger.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
         self.cb_l_ledger.set("<None>")
         self.cb_l_ledger.configure(command=lambda e: self.load_workbook_data())
@@ -2648,8 +2648,16 @@ class App(ctk.CTk):
         hdr_budget.columnconfigure(0, weight=1)
         lbl_budget_title = ttk.Label(hdr_budget, text="Budget Performance Report", style="Header.TLabel", font=("Segoe UI", 13, "bold"))
         lbl_budget_title.grid(row=0, column=0, sticky="w")
+        
+        lbl_filter = ctk.CTkLabel(hdr_budget, text="Filter by Financial Report Category:", font=("Segoe UI", 12), fg_color="transparent")
+        lbl_filter.grid(row=0, column=1, sticky="e", padx=(0, 5))
+        
+        self.cb_dash_budget_category = ctk.CTkComboBox(hdr_budget, values=["All Categories"] + self.config_data.get("fin_report_categories", []), font=("Segoe UI", 13), width=250, command=lambda e: self.render_budget_performance())
+        self.cb_dash_budget_category.set("All Categories")
+        self.cb_dash_budget_category.grid(row=0, column=2, sticky="e", padx=(0, 10))
+        
         btn_budget_print = ctk.CTkButton(hdr_budget, text="Print Report", width=90, text_color="#ffffff", fg_color=self.theme_colors["accent"], command=lambda: self.export_dashboard_report("budget"))
-        btn_budget_print.grid(row=0, column=1, sticky="e")
+        btn_budget_print.grid(row=0, column=3, sticky="e")
         
         self.content_dash_budget = ctk.CTkFrame(self.card_budget, fg_color="transparent")
         self.content_dash_budget.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
@@ -2799,6 +2807,8 @@ class App(ctk.CTk):
         self.card_source.grid(row=0, column=1, columnspan=1, rowspan=1, padx=10, pady=10, sticky="nsew")
         self.card_budget.grid(row=1, column=0, columnspan=2, rowspan=1, padx=10, pady=10, sticky="nsew")
         
+        self.dash_current_period_range = period_range
+        
         self.render_type_summary(period_range)
         self.render_source_summary(period_range)
         self.render_budget_performance(period_range)
@@ -2947,12 +2957,21 @@ class App(ctk.CTk):
             tree.bind("<B1-Motion>", sync_columns_source)
             tree.bind("<ButtonRelease-1>", sync_columns_source)
 
-    def render_budget_performance(self, period_range):
+    def render_budget_performance(self, period_range=None):
+        if period_range is None:
+            period_range = getattr(self, "dash_current_period_range", [])
+            
         # Clear panel content
         for child in self.content_dash_budget.winfo_children():
             child.destroy()
             
-        ledgers = self.config_data.get("ledgers", ["Sales", "Purchases", "Expenses", "Income"])
+        all_ledgers = self.config_data.get("ledgers", ["Sales", "Purchases", "Expenses", "Income"])
+        selected_category = getattr(self, "cb_dash_budget_category", None)
+        if selected_category and selected_category.get() != "All Categories":
+            mapping = self.config_data.get("ledger_category_mapping", {})
+            ledgers = [l for l in all_ledgers if mapping.get(l, "Uncategorized") == selected_category.get()]
+        else:
+            ledgers = all_ledgers
         
         budget_data = {ym: {l: 0.0 for l in ledgers} for ym in period_range}
         for b in self.dash_budget_data:
@@ -3002,8 +3021,8 @@ class App(ctk.CTk):
             bg_even = "#f9fafb" if theme == "light" else "#1e1e1e"
             bg_odd = "#ffffff" if theme == "light" else "#121212"
             bg_total = "#e5e7eb" if theme == "light" else "#27272a"
-            green_color = "#047857" if theme == "light" else "#059669"
-            red_color = "#B91C1C" if theme == "light" else "#DC2626"
+            green_color = "#047857" if theme == "light" else "#34D399"
+            red_color = "#B91C1C" if theme == "light" else "#F87171"
             normal_color = "#1A2530" if theme == "light" else "#F1F5F9"
 
             tree.tag_configure("pos_even", background=bg_even, foreground=green_color)
@@ -3130,7 +3149,15 @@ class App(ctk.CTk):
                     
         elif report_type == "budget":
             title = "Budget Performance Report"
-            categories = self.config_data.get("ledgers", [])
+            all_ledgers = self.config_data.get("ledgers", [])
+            selected_category = getattr(self, "cb_dash_budget_category", None)
+            if selected_category and selected_category.get() != "All Categories":
+                mapping = self.config_data.get("ledger_category_mapping", {})
+                categories = [l for l in all_ledgers if mapping.get(l, "Uncategorized") == selected_category.get()]
+                title += f" ({selected_category.get()})"
+            else:
+                categories = all_ledgers
+
             budget_data = {ym: {l: 0.0 for l in categories} for ym in period_range}
             for b in self.dash_budget_data:
                 ym = (b["year"], b["month"])
