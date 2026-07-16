@@ -3339,7 +3339,12 @@ class PreferencesFrame(ctk.CTkFrame):
         main_frame = ctk.CTkFrame(self, fg_color="transparent")
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        tabview = ctk.CTkTabview(main_frame, segmented_button_font=("Segoe UI", 15, "bold"))
+        tabview = ctk.CTkTabview(
+            main_frame, 
+            segmented_button_font=("Segoe UI", 15, "bold"),
+            segmented_button_selected_color=self.parent.theme_colors["accent"],
+            segmented_button_selected_hover_color=self.parent.theme_colors["accent"]
+        )
         tabview.pack(fill="both", expand=True, pady=(0, 15))
 
         tab_dirs = tabview.add("Directories")
