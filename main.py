@@ -6,6 +6,10 @@ from tkinter import ttk
 from tkinter import messagebox
 from tkinter import simpledialog
 from tkinter import filedialog
+import customtkinter as ctk
+
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("blue")
 
 try:
     from tkcalendar import DateEntry
@@ -109,6 +113,70 @@ def number_to_words(amount):
         result += " Only"
     return result
 
+def make_combo_spinner(parent, default_val, vals):
+    frame = ctk.CTkFrame(parent, fg_color="transparent")
+    combo = ctk.CTkComboBox(frame, values=vals, font=("Segoe UI", 13), width=90)
+    combo.set(str(default_val))
+    combo.pack(side="left", padx=(0, 2))
+    
+    btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+    btn_frame.pack(side="left")
+    
+    frame._command = None
+    def update_vals(curr_val):
+        new_vals = [str(y) for y in range(curr_val, curr_val + 10)]
+        combo.configure(values=new_vals)
+
+    def fire_cmd():
+        if frame._command:
+            frame._command(combo.get())
+            
+    def on_select(val):
+        try:
+            update_vals(int(val))
+        except: pass
+        fire_cmd()
+        
+    combo.configure(command=on_select)
+    
+    def add():
+        try:
+            val = int(combo.get()) + 1
+            combo.set(str(val))
+            update_vals(val)
+            fire_cmd()
+        except: pass
+        
+    def sub():
+        try:
+            val = int(combo.get()) - 1
+            combo.set(str(val))
+            update_vals(val)
+            fire_cmd()
+        except: pass
+        
+    ctk.CTkButton(btn_frame, text="▲", width=20, height=14, font=("Segoe UI", 10), command=add).pack(side="top", pady=(0, 1))
+    ctk.CTkButton(btn_frame, text="▼", width=20, height=14, font=("Segoe UI", 10), command=sub).pack(side="bottom")
+    
+    def config(**kwargs):
+        if "command" in kwargs:
+            frame._command = kwargs.pop("command")
+        if kwargs:
+            combo.configure(**kwargs)
+    
+    def custom_set(val):
+        combo.set(val)
+        try:
+            update_vals(int(val))
+        except: pass
+
+    frame.get = combo.get
+    frame.set = custom_set
+    frame.configure = config
+    frame.delete = lambda first, last=None: custom_set("")
+    frame.insert = lambda index, text: custom_set(text)
+    return frame
+
 class VoucherPDF(fpdf.FPDF):
     def __init__(self, company_info=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -180,36 +248,53 @@ class VoucherPDF(fpdf.FPDF):
         self.set_x(170)
         self.cell(20, 10, f"Page {self.page_no()}", align="R")
 
-class App(tk.Tk):
+class App(ctk.CTk):
     """
     Main application window class for the Financial Records Manager.
-    Inherits from tkinter.Tk to create the primary window.
+    Inherits from customtkinter.CTk to create the primary window.
     """
     def __init__(self):
         super().__init__()
-        
+
         # Initialize configuration
         self.init_config()
-        
+
+        # Define modern flat theme colors as tuples (Light, Dark)
+        self.theme_colors = {
+            "bg": ("#F8F9FA", "#0F172A"),
+            "card": ("#FFFFFF", "#1E293B"),
+            "text": ("#1A2530", "#F1F5F9"),
+            "accent": ("#2B5FDF", "#3B82F6"),
+            "green": ("#10B981", "#34D399"),
+            "red": ("#EF4444", "#F87171"),
+            "border": ("#E2E8F0", "#334155"),
+            "text_muted": ("#64748B", "#94A3B8")
+        }
+
+        # Configure CustomTkinter default themes
+        theme = self.config_data.get("theme", "light")
+        ctk.set_appearance_mode(theme)
+        ctk.set_default_color_theme("blue")
+
         # Initialize theme variable
-        self.theme_var = tk.StringVar(value=self.config_data.get("theme", "light"))
-        
+        self.theme_var = tk.StringVar(value=theme)
+
         # Initialize workbook tracker
         self.current_workbook_path = None
-        
+
         # Configure window properties
         self.is_workbook_valid = True
         self.update_app_title()
         self.geometry("1200x800")
         self.minsize(800, 600)
-        
+
         # Apply premium styles and colors
         self.configure_styles()
-        
+
         # Build standard UI components
-        self.create_menu_bar()
+        # Top menu bar removed as per user request.
         self.create_main_layout()
-        
+
         # Disable inputs at startup since no file is active
         self.set_forms_state("disabled")
 
@@ -224,53 +309,58 @@ class App(tk.Tk):
         self.config_data["theme"] = theme_name
         self.theme_var.set(theme_name)
         self.save_config()
+        ctk.set_appearance_mode(theme_name)
         self.apply_theme()
 
     def update_widget_colors(self, widget):
         """Recursively updates non-ttk standard Tkinter widgets to the new theme colors."""
         widget_class = widget.winfo_class()
-        
+        is_ctk = any(cls.__name__.startswith("CTk") for cls in type(widget).__mro__)
+
         # Standard Tk Widgets
         try:
-            if widget_class == "Label":
-                if widget == getattr(self, "status_label", None):
-                    widget.configure(bg=self.colors["bg"])
-                    if not self.current_workbook_path:
-                        widget.configure(fg=self.colors["text_muted"])
+            if not is_ctk:
+                if widget_class == "Label":
+                    if widget == getattr(self, "status_label", None):
+                        widget.configure(bg=self.colors["bg"])
+                        if not self.current_workbook_path:
+                            widget.configure(fg=self.colors["text_muted"])
+                        else:
+                            curr_fg = widget.cget("fg")
+                            if curr_fg != "#dc2626":
+                                widget.configure(fg=self.colors["accent"])
+                    elif hasattr(widget, "master") and type(widget.master).__name__.startswith("CTk") and type(widget.master).__name__ not in ("CTkFrame", "CTkScrollableFrame", "CTkTabview", "CTk"):
+                        pass
                     else:
-                        curr_fg = widget.cget("fg")
-                        if curr_fg != "#dc2626":
-                            widget.configure(fg=self.colors["accent"])
-                else:
-                    widget.configure(bg=self.colors["card"], fg=self.colors["text"])
-            elif widget_class == "Frame":
-                # Listbox container frame has Listbox inside it
-                has_listbox = False
-                for c in widget.winfo_children():
-                    if c.winfo_class() == "Listbox":
-                        has_listbox = True
-                        break
-                if has_listbox:
-                    widget.configure(bg=self.colors["border"])
-                else:
+                        widget.configure(bg=self.colors["card"], fg=self.colors["text"])
+                elif widget_class == "Frame":
+                    # Listbox container frame has Listbox inside it
+                    has_listbox = False
+                    for c in widget.winfo_children():
+                        if c.winfo_class() == "Listbox":
+                            has_listbox = True
+                            break
+                    if has_listbox:
+                        widget.configure(bg=self.colors["border"])
+                    else:
+                        widget.configure(bg=self.colors["bg"])
+                elif widget_class == "Listbox":
+                    widget.configure(
+                        bg=self.colors["card"], 
+                        fg=self.colors["text"],
+                        selectbackground=self.colors["primary"],
+                        selectforeground="#ffffff"
+                    )
+                elif widget_class == "Toplevel":
                     widget.configure(bg=self.colors["bg"])
-            elif widget_class == "Listbox":
-                widget.configure(
-                    bg=self.colors["card"], 
-                    fg=self.colors["text"],
-                    selectbackground=self.colors["primary"],
-                    selectforeground="#ffffff"
-                )
-            elif widget_class == "Toplevel":
-                widget.configure(bg=self.colors["bg"])
-            elif widget_class == "Text":
-                state = widget.cget("state")
-                bg = self.colors["bg"] if state == "disabled" else self.colors["card"]
-                widget.configure(
-                    bg=bg,
-                    fg=self.colors["text"],
-                    insertbackground=self.colors["text"]
-                )
+                elif widget_class == "Text":
+                    state = widget.cget("state")
+                    bg = self.colors["bg"] if state == "disabled" else self.colors["card"]
+                    widget.configure(
+                        bg=bg,
+                        fg=self.colors["text"],
+                        insertbackground=self.colors["text"]
+                    )
         except tk.TclError:
             pass
             
@@ -281,86 +371,96 @@ class App(tk.Tk):
     def apply_theme(self):
         """Applies light or dark theme colors to ttk styles and active widgets."""
         theme = self.config_data.get("theme", "light")
-        
+
         if theme == "dark":
             self.colors = {
-                "bg": "#000000",          # Pure black
-                "card": "#121212",        # Very dark gray (Material design black card)
-                "primary": "#3b82f6",     # Bright blue
-                "accent": "#14b8a6",      # Teal accent
-                "text": "#f9fafb",        # Light neutral text
-                "text_muted": "#9ca3af",  # Muted light grey text
-                "border": "#374151"       # Dark grey border
+                "bg": "#0F172A",
+                "card": "#1E293B",
+                "primary": "#3B82F6",
+                "accent": "#3B82F6",
+                "text": "#F1F5F9",
+                "text_muted": "#94A3B8",
+                "border": "#334155",
+                "green": "#34D399",
+                "red": "#F87171"
             }
         else:
-            # Light theme (default system-ish colors as originally defined)
             self.colors = {
-                "bg": "#f3f4f6",          # Light neutral background
-                "card": "#ffffff",        # White for container cards/panels
-                "primary": "#1e3a8a",     # Deep Slate Blue
-                "accent": "#0d9488",      # Teal highlight
-                "text": "#1f2937",        # Dark gray text
-                "text_muted": "#4b5563",  # Muted gray text
-                "border": "#e5e7eb"       # Subtle border lines
+                "bg": "#F8F9FA",
+                "card": "#FFFFFF",
+                "primary": "#2B5FDF",
+                "accent": "#2B5FDF",
+                "text": "#1A2530",
+                "text_muted": "#64748B",
+                "border": "#E2E8F0",
+                "green": "#10B981",
+                "red": "#EF4444"
             }
-            
+
         # Update root background
-        self.configure(bg=self.colors["bg"])
-        
+        self.configure(fg_color=self.colors["bg"])
+
         self.style = ttk.Style()
         if "clam" in self.style.theme_names():
             self.style.theme_use("clam")
-            
+
         # Configure standard layouts
         self.style.configure("TNotebook", background=self.colors["bg"], borderwidth=0)
-        self.style.configure("TNotebook.Tab", 
-                              background=self.colors["border"], 
-                              foreground=self.colors["text_muted"], 
-                              padding=[20, 8], 
-                              font=("Segoe UI", 10, "bold"),
+        self.style.configure("TNotebook.Tab",
+                              background=self.colors["border"],
+                              foreground=self.colors["text_muted"],
+                              padding=[20, 8],
+                              font=("Segoe UI", 13, "bold"),
                               borderwidth=0)
-        
+
         self.style.map("TNotebook.Tab",
                        background=[("selected", self.colors["primary"]), ("active", self.colors["accent"])],
                        foreground=[("selected", "#ffffff"), ("active", "#ffffff")])
-        
+
         self.style.configure("TFrame", background=self.colors["bg"])
         self.style.configure("Card.TFrame", background=self.colors["card"], relief="flat", borderwidth=0)
-        
-        self.style.configure("TLabel", background=self.colors["bg"], foreground=self.colors["text"], font=("Segoe UI", 10))
-        self.style.configure("Header.TLabel", background=self.colors["card"], foreground=self.colors["primary"], font=("Segoe UI", 16, "bold"))
-        self.style.configure("Subheader.TLabel", background=self.colors["card"], foreground=self.colors["text_muted"], font=("Segoe UI", 10, "italic"))
-        self.style.configure("CardLabel.TLabel", background=self.colors["card"], foreground=self.colors["text"], font=("Segoe UI", 10))
-        
-        # Entries and Comboboxes
-        self.style.configure("TEntry", 
-                             fieldbackground=self.colors["card"], 
-                             foreground=self.colors["text"],
-                             bordercolor=self.colors["border"],
-                             lightcolor=self.colors["border"])
-        
-        self.style.configure("TCombobox", 
-                             fieldbackground=self.colors["card"], 
-                             foreground=self.colors["text"],
-                             bordercolor=self.colors["border"],
-                             lightcolor=self.colors["border"],
-                             arrowcolor=self.colors["text"])
-        
+
+        self.style.configure("TLabel", background=self.colors["bg"], foreground=self.colors["text"], font=("Segoe UI", 13))
+        self.style.configure("Header.TLabel", background=self.colors["card"], foreground=self.colors["primary"], font=("Segoe UI", 18, "bold"))
+        self.style.configure("Subheader.TLabel", background=self.colors["card"], foreground=self.colors["text_muted"], font=("Segoe UI", 13, "italic"))
+        self.style.configure("CardLabel.TLabel", background=self.colors["card"], foreground=self.colors["text"], font=("Segoe UI", 13))
+
+        # Entries and Comboboxes (focus behaviors will be controlled by customtkinter CTkEntry/CTkComboBox)
+        self.style.configure("TEntry",
+                              fieldbackground=self.colors["card"],
+                              foreground=self.colors["text"],
+                              bordercolor=self.colors["border"],
+                              lightcolor=self.colors["border"])
+
+        self.style.configure("TCombobox",
+                              fieldbackground=self.colors["card"],
+                              foreground=self.colors["text"],
+                              bordercolor=self.colors["border"],
+                              lightcolor=self.colors["border"],
+                              arrowcolor=self.colors["text"])
+
         # Checkbuttons
-        self.style.configure("TCheckbutton", 
-                             background=self.colors["bg"], 
-                             foreground=self.colors["text"])
-        
-        # Treeview Styles
-        self.style.configure("Treeview", 
-                             background=self.colors["card"], 
-                             foreground=self.colors["text"], 
-                             fieldbackground=self.colors["card"])
-        
-        self.style.configure("Treeview.Heading", 
-                             background=self.colors["border"], 
-                             foreground=self.colors["text"], 
-                             bordercolor=self.colors["border"])
+        self.style.configure("TCheckbutton",
+                              background=self.colors["bg"],
+                              foreground=self.colors["text"])
+
+        # Treeview Styles with flat headers and custom row padding
+        self.style.configure("Treeview",
+                              background=self.colors["card"],
+                              foreground=self.colors["text"],
+                              fieldbackground=self.colors["card"],
+                              rowheight=28,
+                              borderwidth=0,
+                              font=("Segoe UI", 13))
+
+        self.style.configure("Treeview.Heading",
+                              background=self.colors["border"],
+                              foreground=self.colors["text_muted"],
+                              bordercolor=self.colors["border"],
+                              lightcolor=self.colors["border"],
+                              darkcolor=self.colors["border"],
+                              borderwidth=1,
+                              font=("Segoe UI", 13, "bold"))
         
         self.style.map("Treeview",
                        background=[("selected", self.colors["primary"])],
@@ -410,7 +510,7 @@ class App(tk.Tk):
         self.update_widget_colors(self)
         
         # Trigger dashboard redraw if initialized to update matplotlib colors
-        if hasattr(self, "cb_dash_year") and self.cb_dash_year:
+        if hasattr(self, "ent_dash_from_year") and self.ent_dash_from_year:
             try:
                 self.render_dashboard()
             except Exception:
@@ -457,7 +557,7 @@ class App(tk.Tk):
         self.menu_bar.add_command(label=self.theme_icon, command=self.toggle_theme_from_menu)
         
         # Mount the Menu Bar to the window
-        self.config(menu=self.menu_bar)
+        self.configure(menu=self.menu_bar)
 
     def toggle_theme_from_menu(self):
         """Toggles theme from the main menu icon and updates the icon."""
@@ -484,8 +584,9 @@ class App(tk.Tk):
         elif hasattr(self, 'setup_lists_tab') and self.setup_lists_tab.grid_info(): self._previous_screen = self.show_setup_lists
 
         self.hide_all_frames()
+        self.set_active_nav("preferences")
         if hasattr(self, 'screen_title_label'):
-            self.screen_title_label.config(text="Preferences")
+            self.screen_title_label.configure(text="Preferences")
         if hasattr(self, 'preferences_tab'):
             self.preferences_tab.grid(row=1, column=0, sticky="nsew")
 
@@ -600,7 +701,7 @@ class App(tk.Tk):
             self.is_workbook_valid = True
             self.update_app_title()
             
-            self.status_label.config(
+            self.status_label.configure(
                 text=f"Active Workbook: {filename}",
                 fg=self.colors["accent"]
             )
@@ -691,8 +792,9 @@ class App(tk.Tk):
     def show_setup_lists(self):
         """Displays the Setup Lists screen."""
         self.hide_all_frames()
+        self.set_active_nav("lists")
         if hasattr(self, 'screen_title_label'):
-            self.screen_title_label.config(text="Setup Lists")
+            self.screen_title_label.configure(text="Setup Lists")
         self.setup_lists_tab.grid(row=1, column=0, sticky="nsew")
 
     def open_workbook(self):
@@ -791,7 +893,7 @@ class App(tk.Tk):
                 self.update_app_title()
                 
                 # Show red status label
-                self.status_label.config(
+                self.status_label.configure(
                     text="Invalid sheet structure. Cannot proceed.",
                     fg="#dc2626"  # Red
                 )
@@ -812,7 +914,7 @@ class App(tk.Tk):
             self.is_workbook_valid = True
             self.update_app_title()
             
-            self.status_label.config(
+            self.status_label.configure(
                 text=f"Active Workbook: {filename}",
                 fg=self.colors["accent"]
             )
@@ -825,7 +927,7 @@ class App(tk.Tk):
             
         except Exception as e:
             self.current_workbook_path = None
-            self.status_label.config(
+            self.status_label.configure(
                 text="No workbook open. Create or open one to proceed.",
                 fg=self.colors["text_muted"]
             )
@@ -925,20 +1027,23 @@ class App(tk.Tk):
                 )
 
             if hasattr(self, 'lbl_trans_status'):
-                self.lbl_trans_status.config(text=f"Total Transactions: {len(trans_records)}")
+                self.lbl_trans_status.configure(text=f"Total Transactions: {len(trans_records)}")
 
             # Load LedgerBudget
             if hasattr(self, 'ledger_tree'):
-                selected_ledger_filter = self.cb_l_ledger.get().strip() if hasattr(self, 'cb_l_ledger') else "<All Ledgers>"
+                selected_ledger_filter = self.cb_l_ledger.get().strip() if hasattr(self, 'cb_l_ledger') else "<None>"
                 ws_ledger = wb["LedgerBudget"]
                 ledger_records = []
                 for row_idx in range(2, ws_ledger.max_row + 1):
+                    if selected_ledger_filter == "<None>":
+                        break
+                        
                     row_vals = [ws_ledger.cell(row=row_idx, column=c).value for c in range(1, 5)]
                     
                     if all(val is None for val in row_vals):
                         continue
                         
-                    if selected_ledger_filter and selected_ledger_filter != "<All Ledgers>":
+                    if selected_ledger_filter != "<All Ledgers>":
                         if str(row_vals[0]).strip() != selected_ledger_filter:
                             continue
                     
@@ -1199,9 +1304,9 @@ class App(tk.Tk):
         """Enables the Print Voucher button if a row is selected and a workbook is open, otherwise disables it."""
         if hasattr(self, 'btn_print_voucher') and self.btn_print_voucher:
             if self.current_workbook_path and self.tree.selection():
-                self.btn_print_voucher.config(state="normal")
+                self.btn_print_voucher.configure(state="normal")
             else:
-                self.btn_print_voucher.config(state="disabled")
+                self.btn_print_voucher.configure(state="disabled")
 
     def print_voucher(self):
         """Generates a clean, professional transaction voucher PDF using fpdf2 and opens it."""
@@ -1455,11 +1560,11 @@ class App(tk.Tk):
         messagebox.showinfo(
             "About Financial Records Manager",
             "Financial Records Manager\n"
-            "Version 1.0.0\n\n"
-            "A premium accounting and budgeting manager featuring dynamic PDF voucher generation, "
-            "comprehensive transaction reporting, transaction year defaults, light/dark themes, "
-            "and a Matplotlib dashboard tracking budget performance.\n\n"
-            "Developed with Python, Tkinter, and fpdf2.",
+            "Version 1.1.0\n\n"
+            "A premium accounting and budgeting solution featuring a modernized interface, "
+            "interactive dashboard analytics, comprehensive Excel-based transaction tracking, "
+            "dynamic year projections, and accessible PDF voucher generation.\n\n"
+            "Powered by Python, CustomTkinter, Openpyxl, Matplotlib, and fpdf2.",
             parent=self
         )
 
@@ -1499,24 +1604,25 @@ class App(tk.Tk):
         if not self.check_workbook_open():
             return
         self.hide_all_frames()
+        self.set_active_nav("report")
         if hasattr(self, 'screen_title_label'):
-            self.screen_title_label.config(text="Transactions Report")
+            self.screen_title_label.configure(text="Transactions Report")
         self.reports_tab.grid(row=1, column=0, sticky="nsew")
         self.reports_tab.load_data()
 
     def refresh_comboboxes(self):
         """Refreshes values in all form Comboboxes using self.config_data."""
         if hasattr(self, 'cb_type') and self.cb_type:
-            self.cb_type['values'] = sorted(self.config_data.get("types", []))
+            self.cb_type.configure(values=sorted(self.config_data.get("types", [])))
         if hasattr(self, 'cb_source_type') and self.cb_source_type:
-            self.cb_source_type['values'] = sorted(self.config_data.get("source_types", []))
+            self.cb_source_type.configure(values=sorted(self.config_data.get("source_types", [])))
         if hasattr(self, 'cb_ledger') and self.cb_ledger:
-            self.cb_ledger['values'] = sorted(self.config_data.get("ledgers", []))
+            self.cb_ledger.configure(values=sorted(self.config_data.get("ledgers", [])))
         if hasattr(self, 'cb_l_ledger') and self.cb_l_ledger:
             ledgers = sorted(self.config_data.get("ledgers", []))
-            self.cb_l_ledger['values'] = ["<All Ledgers>"] + ledgers
-            if not self.cb_l_ledger.get():
-                self.cb_l_ledger.set("<All Ledgers>")
+            self.cb_l_ledger.configure(values=["<None>", "<All Ledgers>"] + ledgers)
+            if not self.cb_l_ledger.get() or self.cb_l_ledger.get() not in (["<None>", "<All Ledgers>"] + ledgers):
+                self.cb_l_ledger.set("<None>")
 
     def validate_ledger_inputs(self, ignore_row_idx=None):
         """
@@ -1537,7 +1643,7 @@ class App(tk.Tk):
             messagebox.showerror("Validation Error", "All fields are required.", parent=self)
             return None
             
-        if ledger_str == "<All Ledgers>":
+        if ledger_str in ("<None>", "<All Ledgers>"):
             messagebox.showerror("Validation Error", "Please select a specific ledger to add or update a budget.", parent=self)
             return None
 
@@ -1633,7 +1739,7 @@ class App(tk.Tk):
             wb.save(self.current_workbook_path)
 
             last_ledger = vals["ledger"]
-            self.clear_ledger_form()
+            self.clear_ledger_form(reload=False)
             self.cb_l_ledger.set(last_ledger)
             self.load_workbook_data()
 
@@ -1651,7 +1757,7 @@ class App(tk.Tk):
         if not vals:
             return
 
-        self.clear_ledger_form()
+        self.clear_ledger_form(reload=False)
         self.cb_l_ledger.set(vals[1])
         self.cb_l_month.set(vals[2])
         self.ent_l_year.insert(0, vals[3])
@@ -1695,7 +1801,7 @@ class App(tk.Tk):
             wb.save(self.current_workbook_path)
 
             last_ledger = vals["ledger"]
-            self.clear_ledger_form()
+            self.clear_ledger_form(reload=False)
             self.cb_l_ledger.set(last_ledger)
             self.load_workbook_data()
 
@@ -1733,7 +1839,7 @@ class App(tk.Tk):
             wb.save(self.current_workbook_path)
 
             last_ledger = self.cb_l_ledger.get()
-            self.clear_ledger_form()
+            self.clear_ledger_form(reload=False)
             if hasattr(self, 'cb_l_ledger') and last_ledger:
                 self.cb_l_ledger.set(last_ledger)
             self.load_workbook_data()
@@ -1742,28 +1848,34 @@ class App(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to delete budget record:\n{e}", parent=self)
 
-    def clear_ledger_form(self):
+    def clear_ledger_form(self, reload=True):
         """Clears the ledger budget form fields."""
         if hasattr(self, 'cb_l_ledger'):
-            self.cb_l_ledger.set("<All Ledgers>")
+            self.cb_l_ledger.set("<None>")
         self.cb_l_month.set("")
         self.ent_l_year.delete(0, tk.END)
         self.ent_l_amount.delete(0, tk.END)
+        if reload:
+            self.load_workbook_data()
 
     def update_menu_state(self, state):
         """
-        Updates the state of the top-level menus (Dashboard, Entries, Transactions Report)
+        Updates the state of the sidebar buttons
         based on whether a workbook is currently open and valid.
         """
-        if not hasattr(self, 'menu_bar'):
-            return
-            
-        try:
-            self.menu_bar.entryconfig("Dashboard", state=state)
-            self.menu_bar.entryconfig("Entries", state=state)
-            self.menu_bar.entryconfig("Transactions Report", state=state)
-        except Exception:
-            pass
+        buttons = [
+            'btn_nav_dashboard',
+            'btn_nav_trans',
+            'btn_nav_ledger',
+            'btn_nav_report',
+            'btn_nav_lists',
+            'btn_nav_close_wb'
+        ]
+        for name in buttons:
+            if hasattr(self, name):
+                btn = getattr(self, name)
+                if btn:
+                    btn.configure(state=state)
 
     def set_forms_state(self, state):
         """
@@ -1798,11 +1910,11 @@ class App(tk.Tk):
             try:
                 if isinstance(widget, ttk.Combobox):
                     if state == "disabled":
-                        widget.config(state="disabled")
+                        widget.configure(state="disabled")
                     else:
-                        widget.config(state="readonly")
+                        widget.configure(state="readonly")
                 else:
-                    widget.config(state=state)
+                    widget.configure(state=state)
             except Exception:
                 pass
 
@@ -1829,75 +1941,215 @@ class App(tk.Tk):
                 
         self.set_forms_state("disabled")
         
-        self.status_label.config(
+        self.status_label.configure(
             text="No workbook open. Create or open one to proceed.",
             fg=self.colors["text_muted"]
         )
         
         self.hide_all_frames()
         if hasattr(self, 'screen_title_label'):
-            self.screen_title_label.config(text="")
+            self.screen_title_label.configure(text="")
+
+    def set_active_nav(self, active_key):
+        """Highlights the active sidebar navigation button and resets others."""
+        for key, btn in self.nav_buttons.items():
+            if key == active_key:
+                btn.configure(fg_color=self.theme_colors["accent"], text_color="#ffffff")
+            else:
+                btn.configure(fg_color="transparent", text_color=self.theme_colors["text"])
 
     def create_main_layout(self):
         """
-        Creates the main body container for the application screens.
+        Creates the left sidebar navigation and the right content area.
         """
-        # Configure layout weights for main application window
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=0)  # Status banner doesn't expand vertically
-        self.rowconfigure(1, weight=1)  # Main container expands vertically
 
-        # Status Banner at the very top of main window
-        self.status_banner = ttk.Frame(self, style="TFrame", padding=(15, 5))
-        self.status_banner.grid(row=0, column=0, sticky="ew")
-        
+        self.columnconfigure(0, weight=0) # Left Sidebar
+        self.columnconfigure(1, weight=1) # Right Content Area
+        self.rowconfigure(0, weight=1)
+
+        # 1. LEFT SIDEBAR PANEL
+        self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color=self.theme_colors["card"])
+        self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.sidebar.grid_rowconfigure(13, weight=1) # Spacer row
+
+        # Sidebar Title
+        lbl_logo = ctk.CTkLabel(
+            self.sidebar,
+            text="Financial Manager",
+            font=("Segoe UI", 18, "bold"),
+            text_color=self.theme_colors["accent"]
+        )
+        lbl_logo.grid(row=0, column=0, padx=20, pady=(20, 20), sticky="w")
+
+        # Sidebar Navigation Buttons
+        self.btn_nav_dashboard = ctk.CTkButton(
+            self.sidebar, text="📊 Dashboard", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.show_dashboard
+        )
+        self.btn_nav_dashboard.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_trans = ctk.CTkButton(
+            self.sidebar, text="📝 Transaction Entries", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.show_transaction_entries
+        )
+        self.btn_nav_trans.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_ledger = ctk.CTkButton(
+            self.sidebar, text="💰 Ledger Budget", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.show_ledger_budget
+        )
+        self.btn_nav_ledger.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_report = ctk.CTkButton(
+            self.sidebar, text="📄 Transactions Report", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.show_transactions_report
+        )
+        self.btn_nav_report.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_lists = ctk.CTkButton(
+            self.sidebar, text="⚙️ Setup Lists", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.show_setup_lists
+        )
+        self.btn_nav_lists.grid(row=5, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_preferences = ctk.CTkButton(
+            self.sidebar, text="🛠️ Preferences", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.show_preferences
+        )
+        self.btn_nav_preferences.grid(row=6, column=0, padx=10, pady=5, sticky="ew")
+
+        # Divider
+        lbl_div = ctk.CTkLabel(self.sidebar, text="—" * 20, text_color=self.theme_colors["border"])
+        lbl_div.grid(row=7, column=0, padx=10, pady=10, sticky="ew")
+
+        # File Actions
+        self.btn_nav_new_wb = ctk.CTkButton(
+            self.sidebar, text="➕ New Workbook", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.create_new_workbook
+        )
+        self.btn_nav_new_wb.grid(row=8, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_open_wb = ctk.CTkButton(
+            self.sidebar, text="📂 Open Workbook", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.open_workbook
+        )
+        self.btn_nav_open_wb.grid(row=9, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_close_wb = ctk.CTkButton(
+            self.sidebar, text="❌ Close Workbook", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.close_workbook
+        )
+        self.btn_nav_close_wb.grid(row=10, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_theme = ctk.CTkButton(
+            self.sidebar, text="🌗 Toggle Theme", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.toggle_theme_from_menu
+        )
+        self.btn_nav_theme.grid(row=11, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_about = ctk.CTkButton(
+            self.sidebar, text="ℹ️ About", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.show_about_dialog
+        )
+        self.btn_nav_about.grid(row=12, column=0, padx=10, pady=5, sticky="ew")
+
+        self.btn_nav_exit = ctk.CTkButton(
+            self.sidebar, text="🚪 Exit", anchor="w",
+            fg_color="transparent", text_color=self.theme_colors["text"],
+            hover_color=self.theme_colors["bg"], font=("Segoe UI", 13, "bold"),
+            command=self.destroy
+        )
+        self.btn_nav_exit.grid(row=14, column=0, padx=10, pady=20, sticky="ew")
+
+        # Keep a tracking dict for active highlighting
+        self.nav_buttons = {
+            "dashboard": self.btn_nav_dashboard,
+            "trans": self.btn_nav_trans,
+            "ledger": self.btn_nav_ledger,
+            "report": self.btn_nav_report,
+            "lists": self.btn_nav_lists,
+            "preferences": self.btn_nav_preferences
+        }
+
+        # 2. RIGHT CONTENT AREA
+        self.content_panel = ctk.CTkFrame(self, corner_radius=0, fg_color=self.theme_colors["bg"])
+        self.content_panel.grid(row=0, column=1, sticky="nsew")
+        self.content_panel.columnconfigure(0, weight=1)
+        self.content_panel.rowconfigure(0, weight=0) # Status Banner
+        self.content_panel.rowconfigure(1, weight=1) # Main Container
+
+        # Status Banner at the top of content panel
+        self.status_banner = ctk.CTkFrame(self.content_panel, corner_radius=0, fg_color=self.theme_colors["bg"])
+        self.status_banner.grid(row=0, column=0, sticky="ew", padx=20, pady=(15, 5))
+
         self.status_label = tk.Label(
-            self.status_banner, 
+            self.status_banner,
             text="No workbook open. Create or open one to proceed.",
             bg=self.colors["bg"],
             fg=self.colors["text_muted"],
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 13, "bold"),
             anchor="w"
         )
         self.status_label.pack(fill="x")
 
-        # Outer container frame to hold the screens and add padding
-        self.main_container = ttk.Frame(self, style="TFrame", padding=(15, 0, 15, 15))
-        self.main_container.grid(row=1, column=0, sticky="nsew")
+        # Main container holds the actual screen frames
+        self.main_container = ctk.CTkFrame(self.content_panel, corner_radius=0, fg_color=self.theme_colors["bg"])
+        self.main_container.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
         self.main_container.columnconfigure(0, weight=1)
         self.main_container.rowconfigure(1, weight=1)
-        
+
         # Screen Title Label
         self.screen_title_label = tk.Label(
             self.main_container,
             text="",
             bg=self.colors["bg"],
             fg=self.colors["primary"],
-            font=("Segoe UI", 16, "bold"),
+            font=("Segoe UI", 20, "bold"),
             anchor="w"
         )
-        self.screen_title_label.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        
-        # Create Screen Frames (replacing old tabs)
-        self.transaction_tab = ttk.Frame(self.main_container, style="TFrame")
-        self.ledger_tab = ttk.Frame(self.main_container, style="TFrame")
-        self.dashboard_tab = ttk.Frame(self.main_container, style="TFrame")
+        self.screen_title_label.grid(row=0, column=0, sticky="ew", pady=(0, 15))
+
+        # Create Screen Frames (using our new customtkinter-based frame subclasses)
+        self.transaction_tab = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        self.ledger_tab = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        self.dashboard_tab = ctk.CTkFrame(self.main_container, fg_color="transparent")
         self.reports_tab = TransactionsReportFrame(self.main_container, self)
         self.setup_lists_tab = SetupListsFrame(self.main_container, self)
         self.preferences_tab = PreferencesFrame(self.main_container, self)
-        
+
         # Populate frames with boilerplate layout cards
         self.populate_transaction_tab()
         self.populate_ledger_tab()
         self.populate_dashboard_tab()
-        
+
         # Apply theme tags to dynamically created UI objects like the Treeviews
         self.apply_theme()
-        
+
         # Show empty screen by default since no workbook is open
         self.hide_all_frames()
-        if hasattr(self, 'screen_title_label'):
-            self.screen_title_label.config(text="")
+        self.screen_title_label.configure(text="")
 
     def hide_all_frames(self):
         """Hides all main screen frames."""
@@ -1926,8 +2178,9 @@ class App(tk.Tk):
     def show_dashboard(self):
         """Displays the Dashboard screen."""
         self.hide_all_frames()
+        self.set_active_nav("dashboard")
         if hasattr(self, 'screen_title_label'):
-            self.screen_title_label.config(text="Dashboard")
+            self.screen_title_label.configure(text="Dashboard")
         self.dashboard_tab.grid(row=1, column=0, sticky="nsew")
         self.reset_dashboard_date_filters()
         try:
@@ -1938,15 +2191,17 @@ class App(tk.Tk):
     def show_transaction_entries(self):
         """Displays the Transaction Entries screen."""
         self.hide_all_frames()
+        self.set_active_nav("trans")
         if hasattr(self, 'screen_title_label'):
-            self.screen_title_label.config(text="Transaction Entries")
+            self.screen_title_label.configure(text="Transaction Entries")
         self.transaction_tab.grid(row=1, column=0, sticky="nsew")
 
     def show_ledger_budget(self):
         """Displays the Ledger Budget screen."""
         self.hide_all_frames()
+        self.set_active_nav("ledger")
         if hasattr(self, 'screen_title_label'):
-            self.screen_title_label.config(text="Ledger Budget")
+            self.screen_title_label.configure(text="Ledger Budget")
         self.ledger_tab.grid(row=1, column=0, sticky="nsew")
 
     def populate_transaction_tab(self):
@@ -1959,7 +2214,7 @@ class App(tk.Tk):
         self.transaction_tab.rowconfigure(2, weight=1)  # Grid row expands
 
         # Scroll container wraps the top form
-        scroll_container = ttk.Frame(self.transaction_tab, style="TFrame")
+        scroll_container = ctk.CTkFrame(self.transaction_tab, fg_color="transparent")
         scroll_container.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         scroll_container.columnconfigure(0, weight=1)
 
@@ -1967,14 +2222,14 @@ class App(tk.Tk):
         h_scroll_form = ttk.Scrollbar(scroll_container, orient="horizontal")
         h_scroll_form.pack(side="top", fill="x")
 
-        form_canvas = tk.Canvas(scroll_container, bg=self.colors.get("bg", "#f3f4f6"), highlightthickness=0)
+        form_canvas = tk.Canvas(scroll_container, bg=self.colors.get("bg", "#f8f9fa"), highlightthickness=0)
         form_canvas.pack(side="top", fill="x", expand=True)
 
-        h_scroll_form.config(command=form_canvas.xview)
-        form_canvas.config(xscrollcommand=h_scroll_form.set)
+        h_scroll_form.configure(command=form_canvas.xview)
+        form_canvas.configure(xscrollcommand=h_scroll_form.set)
 
         # Form Card Container
-        card = ttk.Frame(form_canvas, style="Card.TFrame", padding=15)
+        card = ctk.CTkFrame(form_canvas, fg_color=self.theme_colors["card"], corner_radius=8, border_width=1, border_color=self.theme_colors["border"])
         form_window_id = form_canvas.create_window((0, 0), window=card, anchor="nw")
 
         def on_form_canvas_configure(event):
@@ -1990,125 +2245,128 @@ class App(tk.Tk):
 
         form_canvas.bind("<Configure>", on_form_canvas_configure)
         card.bind("<Configure>", on_card_configure)
-        
+
         # Divide card into two columns and add a dummy column for extra space
         card.columnconfigure(0, weight=0)
         card.columnconfigure(1, weight=0)
         card.columnconfigure(2, weight=1)
-        
-        left_half = ttk.Frame(card, style="Card.TFrame")
-        left_half.grid(row=0, column=0, padx=(0, 15), sticky="nsew")
+
+        left_half = ctk.CTkFrame(card, fg_color="transparent")
+        left_half.grid(row=0, column=0, padx=(15, 15), pady=15, sticky="nsew")
         left_half.columnconfigure(0, weight=1)
-        
-        right_half = ttk.Frame(card, style="Card.TFrame")
-        right_half.grid(row=0, column=1, padx=(15, 0), sticky="nsew")
+
+        right_half = ctk.CTkFrame(card, fg_color="transparent")
+        right_half.grid(row=0, column=1, padx=(15, 15), pady=15, sticky="nsew")
         right_half.columnconfigure(0, weight=1)
 
         # ---- LEFT HALF FIELDS ----
-        left_top_row = ttk.Frame(left_half, style="Card.TFrame")
+        left_top_row = ctk.CTkFrame(left_half, fg_color="transparent")
         left_top_row.grid(row=0, column=0, pady=(0, 10), sticky="ew")
-        
+
         # Configure three columns for Date, Voucher Number, and Source Ref
-        left_top_row.columnconfigure(0, weight=0, minsize=150)
-        left_top_row.columnconfigure(1, weight=0, minsize=150)
-        left_top_row.columnconfigure(2, weight=0, minsize=150)
+        left_top_row.columnconfigure(0, weight=0, minsize=160)
+        left_top_row.columnconfigure(1, weight=0, minsize=160)
+        left_top_row.columnconfigure(2, weight=0, minsize=160)
         # Dummy column to absorb extra space so fields cluster on the left
         left_top_row.columnconfigure(3, weight=1)
-        
+
         # Column 0: Date
         lbl_date = ttk.Label(left_top_row, text="Date (DD-MM-YYYY):", style="CardLabel.TLabel")
         lbl_date.grid(row=0, column=0, pady=(5, 2), sticky="w")
-        
-        date_container = ttk.Frame(left_top_row, style="Card.TFrame")
+
+        date_container = ctk.CTkFrame(left_top_row, fg_color="transparent")
         date_container.grid(row=1, column=0, pady=(0, 5), sticky="w")
-        
-        self.ent_date = ttk.Entry(date_container, font=("Segoe UI", 10), width=15)
+
+        self.ent_date = ctk.CTkEntry(date_container, font=("Segoe UI", 16), width=125)
         self.ent_date.pack(side="left")
-        
-        self.btn_date_picker = ttk.Button(date_container, text="📅", width=3, command=self.pick_date)
+
+        self.btn_date_picker = ctk.CTkButton(date_container, text="📅", width=35, fg_color=self.theme_colors["accent"], command=self.pick_date)
         self.btn_date_picker.pack(side="left", padx=(5, 0))
- 
+
         # Column 1: Voucher Number
         lbl_voucher = ttk.Label(left_top_row, text="Voucher Number:", style="CardLabel.TLabel")
         lbl_voucher.grid(row=0, column=1, pady=(5, 2), sticky="w", padx=10)
-        self.ent_voucher = ttk.Entry(left_top_row, font=("Segoe UI", 10), width=15)
+        self.ent_voucher = ctk.CTkEntry(left_top_row, font=("Segoe UI", 16), width=135)
         self.ent_voucher.grid(row=1, column=1, pady=(0, 5), sticky="w", padx=10)
- 
+
         # Column 2: Source Ref
         lbl_source_ref = ttk.Label(left_top_row, text="Source Ref:", style="CardLabel.TLabel")
         lbl_source_ref.grid(row=0, column=2, pady=(5, 2), sticky="w", padx=10)
-        self.ent_source_ref = ttk.Entry(left_top_row, font=("Segoe UI", 10), width=15)
+        self.ent_source_ref = ctk.CTkEntry(left_top_row, font=("Segoe UI", 16), width=135)
         self.ent_source_ref.grid(row=1, column=2, pady=(0, 5), sticky="w", padx=10)
- 
+
         # Description
         lbl_desc = ttk.Label(left_half, text="Description:", style="CardLabel.TLabel")
         lbl_desc.grid(row=1, column=0, pady=(5, 2), sticky="w")
-        self.ent_desc = MultilineEntry(left_half, self, height=3, width=60)
+        self.ent_desc = MultilineEntry(left_half, self, height=3, width=60, font=("Segoe UI", 15))
         self.ent_desc.grid(row=2, column=0, pady=(0, 5), sticky="w")
- 
+
         # Amount (moved below description, width=15, aligned left)
         lbl_amount = ttk.Label(left_half, text="Amount:", style="CardLabel.TLabel")
         lbl_amount.grid(row=3, column=0, pady=(5, 2), sticky="w")
-        self.ent_amount = ttk.Entry(left_half, font=("Segoe UI", 10), width=15)
+        self.ent_amount = ctk.CTkEntry(left_half, font=("Segoe UI", 16), width=135)
         self.ent_amount.grid(row=4, column=0, pady=(0, 5), sticky="w")
         self.ent_amount.bind("<FocusOut>", self.format_amount_field)
- 
+
         # ---- RIGHT HALF FIELDS ----
         # Type
         lbl_type = ttk.Label(right_half, text="Type:", style="CardLabel.TLabel")
         lbl_type.grid(row=0, column=0, pady=(5, 2), sticky="w")
-        self.cb_type = ttk.Combobox(right_half, font=("Segoe UI", 10), state="readonly", width=50)
+        self.cb_type = ctk.CTkComboBox(right_half, font=("Segoe UI", 16), width=400)
         self.cb_type.grid(row=1, column=0, pady=(0, 10), sticky="w")
- 
+        self.cb_type.set("")
+
         # Source Type
         lbl_source_type = ttk.Label(right_half, text="Source Type:", style="CardLabel.TLabel")
         lbl_source_type.grid(row=2, column=0, pady=(5, 2), sticky="w")
-        self.cb_source_type = ttk.Combobox(right_half, font=("Segoe UI", 10), state="readonly", width=50)
+        self.cb_source_type = ctk.CTkComboBox(right_half, font=("Segoe UI", 16), width=400)
         self.cb_source_type.grid(row=3, column=0, pady=(0, 10), sticky="w")
- 
+        self.cb_source_type.set("")
+
         # Ledger Category
         lbl_ledger = ttk.Label(right_half, text="Ledger Category:", style="CardLabel.TLabel")
         lbl_ledger.grid(row=4, column=0, pady=(5, 2), sticky="w")
-        self.cb_ledger = ttk.Combobox(right_half, font=("Segoe UI", 10), state="readonly", width=50)
+        self.cb_ledger = ctk.CTkComboBox(right_half, font=("Segoe UI", 16), width=400)
         self.cb_ledger.grid(row=5, column=0, pady=(0, 10), sticky="w")
+        self.cb_ledger.set("")
 
         # Button Toolbar Container
-        btn_frame = ttk.Frame(self.transaction_tab, style="TFrame")
+        btn_frame = ctk.CTkFrame(self.transaction_tab, fg_color="transparent")
         btn_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
 
-        self.btn_add = ttk.Button(btn_frame, text="Add", command=self.add_transaction)
+        self.btn_add = ctk.CTkButton(btn_frame, text="Add", fg_color=self.theme_colors["accent"], width=80, command=self.add_transaction)
         self.btn_add.pack(side="left", padx=(0, 10))
 
-        self.btn_update = ttk.Button(btn_frame, text="Update", command=self.update_transaction)
+        self.btn_update = ctk.CTkButton(btn_frame, text="Update", fg_color=self.theme_colors["accent"], width=80, command=self.update_transaction)
         self.btn_update.pack(side="left", padx=10)
 
-        self.btn_delete = ttk.Button(btn_frame, text="Delete", command=self.delete_transaction)
+        self.btn_delete = ctk.CTkButton(btn_frame, text="Delete", fg_color=self.theme_colors["accent"], width=80, command=self.delete_transaction)
         self.btn_delete.pack(side="left", padx=10)
 
-        self.btn_retrieve = ttk.Button(btn_frame, text="Retrieve", command=self.retrieve_transaction)
+        self.btn_retrieve = ctk.CTkButton(btn_frame, text="Retrieve", fg_color=self.theme_colors["accent"], width=80, command=self.retrieve_transaction)
         self.btn_retrieve.pack(side="left", padx=10)
 
-        self.btn_clear = ttk.Button(btn_frame, text="Clear", command=self.clear_form)
+        self.btn_clear = ctk.CTkButton(btn_frame, text="Clear", fg_color=self.theme_colors["accent"], width=80, command=self.clear_form)
         self.btn_clear.pack(side="left", padx=10)
 
-        self.btn_print_voucher = ttk.Button(btn_frame, text="Print Voucher", command=self.print_voucher, state="disabled")
+        self.btn_print_voucher = ctk.CTkButton(btn_frame, text="Print Voucher", fg_color=self.theme_colors["accent"], width=110, command=self.print_voucher, state="disabled")
         self.btn_print_voucher.pack(side="left", padx=10)
         # Data Grid Container (Treeview)
-        grid_frame = ttk.Frame(self.transaction_tab, style="TFrame")
+        grid_frame = ctk.CTkFrame(self.transaction_tab, fg_color="transparent")
         grid_frame.grid(row=2, column=0, sticky="nsew")
         grid_frame.rowconfigure(0, weight=1)
         grid_frame.columnconfigure(0, weight=1)
 
         columns = ("No.", "Date", "Voucher Number", "Type", "Source Type", "Source Ref", "Description", "Ledger", "Financial Report Category", "Amount")
         self.tree = ttk.Treeview(grid_frame, columns=columns, show="headings", selectmode="browse")
-        self.tree.configure(displaycolumns=[c for c in columns if c != "No."])
+        self.tree.configure(displaycolumns=[c for c in columns if c not in ("No.", "Financial Report Category")])
 
         # Configure columns header and widths
         for col in columns:
             if col in ("Ledger", "Date", "Voucher Number", "Type", "Source Type", "Source Ref", "Description", "Financial Report Category"):
                 self.tree.heading(col, text=col, anchor="w")
             elif col == "Amount":
-                self.tree.heading(col, text=col, anchor="e")
+                self.tree.heading(col, text="Amount (₦)", anchor="e")
             else:
                 self.tree.heading(col, text=col)
 
@@ -2139,7 +2397,7 @@ class App(tk.Tk):
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
 
         # Status Bar
-        self.lbl_trans_status = ttk.Label(self.transaction_tab, text="Total Transactions: 0", font=("Segoe UI", 9, "italic"))
+        self.lbl_trans_status = ttk.Label(self.transaction_tab, text="Total Transactions: 0", font=("Segoe UI", 11, "italic"))
         self.lbl_trans_status.grid(row=3, column=0, sticky="e", pady=(0, 5), padx=10)
 
         # Populate combobox values initial load
@@ -2155,20 +2413,20 @@ class App(tk.Tk):
         self.ledger_tab.rowconfigure(2, weight=1)  # Grid row expands
 
         # Scroll container wraps the top form
-        scroll_container = ttk.Frame(self.ledger_tab, style="TFrame")
+        scroll_container = ctk.CTkFrame(self.ledger_tab, fg_color="transparent")
         scroll_container.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         scroll_container.columnconfigure(0, weight=1)
 
         h_scroll_form = ttk.Scrollbar(scroll_container, orient="horizontal")
         h_scroll_form.pack(side="top", fill="x")
 
-        form_canvas = tk.Canvas(scroll_container, bg=self.colors.get("bg", "#f3f4f6"), highlightthickness=0)
+        form_canvas = tk.Canvas(scroll_container, bg=self.colors.get("bg", "#f8f9fa"), highlightthickness=0)
         form_canvas.pack(side="top", fill="x", expand=True)
 
-        h_scroll_form.config(command=form_canvas.xview)
-        form_canvas.config(xscrollcommand=h_scroll_form.set)
+        h_scroll_form.configure(command=form_canvas.xview)
+        form_canvas.configure(xscrollcommand=h_scroll_form.set)
 
-        card = ttk.Frame(form_canvas, style="Card.TFrame", padding=15)
+        card = ctk.CTkFrame(form_canvas, fg_color=self.theme_colors["card"], corner_radius=8, border_width=1, border_color=self.theme_colors["border"])
         form_window_id = form_canvas.create_window((0, 0), window=card, anchor="nw")
 
         def on_form_canvas_configure(event):
@@ -2184,58 +2442,60 @@ class App(tk.Tk):
 
         form_canvas.bind("<Configure>", on_form_canvas_configure)
         card.bind("<Configure>", on_card_configure)
-        
+
         import calendar
         for col_idx in range(4):
-            card.columnconfigure(col_idx, weight=0, minsize=150)
-        
+            card.columnconfigure(col_idx, weight=0, minsize=140)
+
         # Add a dummy 5th column to absorb extra space when the window expands
         card.columnconfigure(4, weight=1)
 
         # Form Inputs Grid
         lbl_ledger = ttk.Label(card, text="Ledger Category:", style="CardLabel.TLabel")
-        lbl_ledger.grid(row=0, column=0, padx=10, pady=(5, 2), sticky="w")
-        self.cb_l_ledger = ttk.Combobox(card, font=("Segoe UI", 10), state="readonly", width=50)
-        self.cb_l_ledger.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
-        self.cb_l_ledger.bind("<<ComboboxSelected>>", lambda e: self.load_workbook_data())
+        lbl_ledger.grid(row=0, column=0, padx=15, pady=(15, 2), sticky="w")
+        self.cb_l_ledger = ctk.CTkComboBox(card, font=("Segoe UI", 13), width=120)
+        self.cb_l_ledger.grid(row=1, column=0, padx=15, pady=(0, 15), sticky="ew")
+        self.cb_l_ledger.set("<None>")
+        self.cb_l_ledger.configure(command=lambda e: self.load_workbook_data())
 
         lbl_month = ttk.Label(card, text="Month:", style="CardLabel.TLabel")
-        lbl_month.grid(row=0, column=1, padx=10, pady=(5, 2), sticky="w")
-        self.cb_l_month = ttk.Combobox(card, font=("Segoe UI", 10), state="readonly", values=list(calendar.month_name)[1:])
-        self.cb_l_month.grid(row=1, column=1, padx=10, pady=(0, 10), sticky="ew")
+        lbl_month.grid(row=0, column=1, padx=15, pady=(15, 2), sticky="w")
+        self.cb_l_month = ctk.CTkComboBox(card, font=("Segoe UI", 13), values=list(calendar.month_name)[1:], width=120)
+        self.cb_l_month.grid(row=1, column=1, padx=15, pady=(0, 15), sticky="ew")
+        self.cb_l_month.set(list(calendar.month_name)[datetime.now().month])
 
         lbl_year = ttk.Label(card, text="Year:", style="CardLabel.TLabel")
-        lbl_year.grid(row=0, column=2, padx=10, pady=(5, 2), sticky="w")
-        self.ent_l_year = ttk.Entry(card, font=("Segoe UI", 10), width=10)
-        self.ent_l_year.grid(row=1, column=2, padx=10, pady=(0, 10), sticky="w")
+        lbl_year.grid(row=0, column=2, padx=15, pady=(15, 2), sticky="w")
+        self.ent_l_year = make_combo_spinner(card, datetime.now().year, [str(y) for y in range(datetime.now().year, datetime.now().year + 10)])
+        self.ent_l_year.grid(row=1, column=2, padx=15, pady=(0, 15), sticky="w")
 
         lbl_amount = ttk.Label(card, text="Budget Amount:", style="CardLabel.TLabel")
-        lbl_amount.grid(row=0, column=3, padx=10, pady=(5, 2), sticky="w")
-        self.ent_l_amount = ttk.Entry(card, font=("Segoe UI", 10), width=15)
-        self.ent_l_amount.grid(row=1, column=3, padx=10, pady=(0, 10), sticky="w")
+        lbl_amount.grid(row=0, column=3, padx=15, pady=(15, 2), sticky="w")
+        self.ent_l_amount = ctk.CTkEntry(card, font=("Segoe UI", 13), width=120)
+        self.ent_l_amount.grid(row=1, column=3, padx=15, pady=(0, 15), sticky="w")
         self.ent_l_amount.bind("<FocusOut>", self.format_ledger_amount_field)
 
         # Button Toolbar Container
-        btn_frame = ttk.Frame(self.ledger_tab, style="TFrame")
+        btn_frame = ctk.CTkFrame(self.ledger_tab, fg_color="transparent")
         btn_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
 
-        self.btn_l_add = ttk.Button(btn_frame, text="Add", command=self.add_ledger_budget)
+        self.btn_l_add = ctk.CTkButton(btn_frame, text="Add", fg_color=self.theme_colors["accent"], width=80, command=self.add_ledger_budget)
         self.btn_l_add.pack(side="left", padx=(0, 10))
 
-        self.btn_l_update = ttk.Button(btn_frame, text="Update", command=self.update_ledger_budget)
+        self.btn_l_update = ctk.CTkButton(btn_frame, text="Update", fg_color=self.theme_colors["accent"], width=80, command=self.update_ledger_budget)
         self.btn_l_update.pack(side="left", padx=10)
 
-        self.btn_l_delete = ttk.Button(btn_frame, text="Delete", command=self.delete_ledger_budget)
+        self.btn_l_delete = ctk.CTkButton(btn_frame, text="Delete", fg_color=self.theme_colors["accent"], width=80, command=self.delete_ledger_budget)
         self.btn_l_delete.pack(side="left", padx=10)
 
-        self.btn_l_retrieve = ttk.Button(btn_frame, text="Retrieve", command=self.retrieve_ledger_budget)
+        self.btn_l_retrieve = ctk.CTkButton(btn_frame, text="Retrieve", fg_color=self.theme_colors["accent"], width=80, command=self.retrieve_ledger_budget)
         self.btn_l_retrieve.pack(side="left", padx=10)
 
-        self.btn_l_clear = ttk.Button(btn_frame, text="Clear", command=self.clear_ledger_form)
+        self.btn_l_clear = ctk.CTkButton(btn_frame, text="Clear", fg_color=self.theme_colors["accent"], width=80, command=self.clear_ledger_form)
         self.btn_l_clear.pack(side="left", padx=10)
 
         # Data Grid Container (Treeview)
-        grid_frame = ttk.Frame(self.ledger_tab, style="TFrame")
+        grid_frame = ctk.CTkFrame(self.ledger_tab, fg_color="transparent")
         grid_frame.grid(row=2, column=0, sticky="nsew")
         grid_frame.rowconfigure(0, weight=1)
         grid_frame.columnconfigure(0, weight=1)
@@ -2248,7 +2508,7 @@ class App(tk.Tk):
             if col in ("Ledger", "Month", "Year"):
                 self.ledger_tree.heading(col, text=col, anchor="w")
             elif col == "Amount":
-                self.ledger_tree.heading(col, text=col, anchor="e")
+                self.ledger_tree.heading(col, text="Amount (₦)", anchor="e")
             else:
                 self.ledger_tree.heading(col, text=col)
                 
@@ -2283,118 +2543,116 @@ class App(tk.Tk):
         """Sets up the scrollable layout and dashboard cards on the Dashboard tab."""
         self.dashboard_tab.columnconfigure(0, weight=1)
         self.dashboard_tab.rowconfigure(1, weight=1)
-        
+
         # 1. Top Control Toolbar (Refresh, Date selection, View Mode)
-        controls_frame = ttk.Frame(self.dashboard_tab, style="TFrame", padding=(15, 10))
-        controls_frame.grid(row=0, column=0, sticky="ew")
-        
+        controls_frame = ctk.CTkFrame(self.dashboard_tab, fg_color="transparent")
+        controls_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=10)
+
+
         months_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        years_list = [str(y) for y in range(2000, 2101)]
+        years_list = [str(y) for y in range(datetime.now().year, datetime.now().year + 10)]
 
         lbl_from = ttk.Label(controls_frame, text="From:", style="TLabel")
         lbl_from.pack(side="left", padx=(0, 5))
-        
-        self.ent_dash_from_year = ttk.Combobox(controls_frame, values=years_list, font=("Segoe UI", 10), state="readonly", width=6)
-        self.ent_dash_from_year.set(str(datetime.now().year))
+
+        self.ent_dash_from_year = make_combo_spinner(controls_frame, datetime.now().year, years_list)
         self.ent_dash_from_year.pack(side="left", padx=2)
-        
-        self.cb_dash_from_month = ttk.Combobox(controls_frame, values=months_names, font=("Segoe UI", 10), state="readonly", width=5)
+
+        self.cb_dash_from_month = ctk.CTkComboBox(controls_frame, values=months_names, font=("Segoe UI", 13), width=90)
         self.cb_dash_from_month.set(months_names[datetime.now().month - 1])
         self.cb_dash_from_month.pack(side="left", padx=(2, 10))
-        
+
         lbl_to = ttk.Label(controls_frame, text="To:", style="TLabel")
         lbl_to.pack(side="left", padx=(5, 5))
-        
-        self.ent_dash_to_year = ttk.Combobox(controls_frame, values=years_list, font=("Segoe UI", 10), state="readonly", width=6)
-        self.ent_dash_to_year.set(str(datetime.now().year))
+
+        self.ent_dash_to_year = make_combo_spinner(controls_frame, datetime.now().year, years_list)
         self.ent_dash_to_year.pack(side="left", padx=2)
-        
-        self.cb_dash_to_month = ttk.Combobox(controls_frame, values=months_names, font=("Segoe UI", 10), state="readonly", width=5)
+
+        self.cb_dash_to_month = ctk.CTkComboBox(controls_frame, values=months_names, font=("Segoe UI", 13), width=90)
         self.cb_dash_to_month.set(months_names[datetime.now().month - 1])
         self.cb_dash_to_month.pack(side="left", padx=(2, 10))
-        
-        self.cb_dash_from_month.bind("<<ComboboxSelected>>", lambda e: self.render_dashboard())
-        self.ent_dash_from_year.bind("<<ComboboxSelected>>", lambda e: self.render_dashboard())
-        self.cb_dash_to_month.bind("<<ComboboxSelected>>", lambda e: self.render_dashboard())
-        self.ent_dash_to_year.bind("<<ComboboxSelected>>", lambda e: self.render_dashboard())
-        
-        self.btn_dash_refresh = ttk.Button(controls_frame, text="Refresh Dashboard", command=self.refresh_dashboard)
+
+        self.cb_dash_from_month.configure(command=lambda e: self.render_dashboard())
+        self.ent_dash_from_year.configure(command=lambda e: self.render_dashboard())
+        self.cb_dash_to_month.configure(command=lambda e: self.render_dashboard())
+        self.ent_dash_to_year.configure(command=lambda e: self.render_dashboard())
+
+        self.btn_dash_refresh = ctk.CTkButton(controls_frame, text="Refresh Dashboard", text_color="#ffffff", fg_color=self.theme_colors["accent"], command=self.refresh_dashboard)
         self.btn_dash_refresh.pack(side="right", padx=5)
-        
+
         # 2. Scrollable Canvas
         self.dash_canvas = tk.Canvas(self.dashboard_tab, bg=self.colors["bg"], bd=0, highlightthickness=0)
         self.dash_scrollbar = ttk.Scrollbar(self.dashboard_tab, orient="vertical", command=self.dash_canvas.yview)
-        self.dash_scroll_content = ttk.Frame(self.dash_canvas, style="TFrame")
-        
+        self.dash_scroll_content = ctk.CTkFrame(self.dash_canvas, fg_color="transparent")
+
         self.dash_scroll_content.bind(
             "<Configure>",
             lambda e: self.dash_canvas.configure(scrollregion=self.dash_canvas.bbox("all"))
         )
         self.dash_canvas_window = self.dash_canvas.create_window((0, 0), window=self.dash_scroll_content, anchor="nw")
-        
+
         def on_canvas_configure(event):
             self.dash_canvas.itemconfig(self.dash_canvas_window, width=event.width)
         self.dash_canvas.bind("<Configure>", on_canvas_configure)
-        
+
         self.dash_canvas.configure(yscrollcommand=self.dash_scrollbar.set)
-        
+
         self.dash_canvas.grid(row=1, column=0, sticky="nsew")
         self.dash_scrollbar.grid(row=1, column=1, sticky="ns")
-        
+
         # 3. Card Sections Grid
         self.dash_scroll_content.columnconfigure(0, weight=1, uniform="dash_col")
         self.dash_scroll_content.columnconfigure(1, weight=1, uniform="dash_col")
-        
+
         # Type Summary Card
-        self.card_type = ttk.Frame(self.dash_scroll_content, style="Card.TFrame", padding=15)
+        self.card_type = ctk.CTkFrame(self.dash_scroll_content, fg_color=self.theme_colors["card"], corner_radius=8, border_width=1, border_color=self.theme_colors["border"])
         self.card_type.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
         self.card_type.columnconfigure(0, weight=1)
         self.card_type.rowconfigure(1, weight=1)
-        
-        hdr_type = ttk.Frame(self.card_type, style="Card.TFrame")
-        hdr_type.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+
+        hdr_type = ctk.CTkFrame(self.card_type, fg_color="transparent")
+        hdr_type.grid(row=0, column=0, sticky="ew", pady=(10, 10), padx=15)
         hdr_type.columnconfigure(0, weight=1)
-        lbl_type_title = ttk.Label(hdr_type, text="Monthly Summary by Transaction Type", style="Header.TLabel", font=("Segoe UI", 12, "bold"))
+        lbl_type_title = ttk.Label(hdr_type, text="Monthly Summary by Transaction Type", style="Header.TLabel", font=("Segoe UI", 13, "bold"))
         lbl_type_title.grid(row=0, column=0, sticky="w")
-        btn_type_print = ttk.Button(hdr_type, text="Print Report", command=lambda: self.export_dashboard_report("type"))
+        btn_type_print = ctk.CTkButton(hdr_type, text="Print Report", width=90, text_color="#ffffff", fg_color=self.theme_colors["accent"], command=lambda: self.export_dashboard_report("type"))
         btn_type_print.grid(row=0, column=1, sticky="e")
-        
-        self.content_dash_type = ttk.Frame(self.card_type, style="Card.TFrame")
-        self.content_dash_type.grid(row=1, column=0, sticky="nsew")
-        
+
+        self.content_dash_type = ctk.CTkFrame(self.card_type, fg_color="transparent")
+        self.content_dash_type.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+
         # Source Summary Card
-        self.card_source = ttk.Frame(self.dash_scroll_content, style="Card.TFrame", padding=15)
+        self.card_source = ctk.CTkFrame(self.dash_scroll_content, fg_color=self.theme_colors["card"], corner_radius=8, border_width=1, border_color=self.theme_colors["border"])
         self.card_source.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
         self.card_source.columnconfigure(0, weight=1)
         self.card_source.rowconfigure(1, weight=1)
-        
-        hdr_source = ttk.Frame(self.card_source, style="Card.TFrame")
-        hdr_source.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+
+        hdr_source = ctk.CTkFrame(self.card_source, fg_color="transparent")
+        hdr_source.grid(row=0, column=0, sticky="ew", pady=(10, 10), padx=15)
         hdr_source.columnconfigure(0, weight=1)
-        lbl_source_title = ttk.Label(hdr_source, text="Monthly Summary by Source Type", style="Header.TLabel", font=("Segoe UI", 12, "bold"))
+        lbl_source_title = ttk.Label(hdr_source, text="Monthly Summary by Source Type", style="Header.TLabel", font=("Segoe UI", 13, "bold"))
         lbl_source_title.grid(row=0, column=0, sticky="w")
-        btn_source_print = ttk.Button(hdr_source, text="Print Report", command=lambda: self.export_dashboard_report("source"))
+        btn_source_print = ctk.CTkButton(hdr_source, text="Print Report", width=90, text_color="#ffffff", fg_color=self.theme_colors["accent"], command=lambda: self.export_dashboard_report("source"))
         btn_source_print.grid(row=0, column=1, sticky="e")
-        
-        self.content_dash_source = ttk.Frame(self.card_source, style="Card.TFrame")
-        self.content_dash_source.grid(row=1, column=0, sticky="nsew")
-        
+
+        self.content_dash_source = ctk.CTkFrame(self.card_source, fg_color="transparent")
+        self.content_dash_source.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
         # Budget Performance Card
-        self.card_budget = ttk.Frame(self.dash_scroll_content, style="Card.TFrame", padding=15)
+        self.card_budget = ctk.CTkFrame(self.dash_scroll_content, fg_color=self.theme_colors["card"], corner_radius=8, border_width=1, border_color=self.theme_colors["border"])
         self.card_budget.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
         self.card_budget.columnconfigure(0, weight=1)
         self.card_budget.rowconfigure(1, weight=1)
         
-        hdr_budget = ttk.Frame(self.card_budget, style="Card.TFrame")
-        hdr_budget.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        hdr_budget = ctk.CTkFrame(self.card_budget, fg_color="transparent")
+        hdr_budget.grid(row=0, column=0, sticky="ew", pady=(10, 10), padx=15)
         hdr_budget.columnconfigure(0, weight=1)
-        lbl_budget_title = ttk.Label(hdr_budget, text="Budget Performance Report", style="Header.TLabel", font=("Segoe UI", 12, "bold"))
+        lbl_budget_title = ttk.Label(hdr_budget, text="Budget Performance Report", style="Header.TLabel", font=("Segoe UI", 13, "bold"))
         lbl_budget_title.grid(row=0, column=0, sticky="w")
-        btn_budget_print = ttk.Button(hdr_budget, text="Print Report", command=lambda: self.export_dashboard_report("budget"))
+        btn_budget_print = ctk.CTkButton(hdr_budget, text="Print Report", width=90, text_color="#ffffff", fg_color=self.theme_colors["accent"], command=lambda: self.export_dashboard_report("budget"))
         btn_budget_print.grid(row=0, column=1, sticky="e")
         
-        self.content_dash_budget = ttk.Frame(self.card_budget, style="Card.TFrame")
-        self.content_dash_budget.grid(row=1, column=0, sticky="nsew")
+        self.content_dash_budget = ctk.CTkFrame(self.card_budget, fg_color="transparent")
+        self.content_dash_budget.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
 
     def load_dashboard_data(self):
         """Loads and aggregates data from the current workbook for the dashboard."""
@@ -2519,6 +2777,9 @@ class App(tk.Tk):
             
         # Ensure 'from' is <= 'to'
         if f_year > t_year or (f_year == t_year and f_month > t_month):
+            self.card_type.grid_remove()
+            self.card_source.grid_remove()
+            self.card_budget.grid_remove()
             from tkinter import messagebox
             messagebox.showerror("Invalid Period", "The 'From' period cannot be later than the 'To' period.", parent=self)
             return
@@ -2566,7 +2827,7 @@ class App(tk.Tk):
             
             tree = ttk.Treeview(self.content_dash_type, columns=columns, show="headings", height=8, yscrollcommand=v_scroll.set)
             tree_totals = ttk.Treeview(self.content_dash_type, columns=columns, show="", height=1)
-            v_scroll.config(command=tree.yview)
+            v_scroll.configure(command=tree.yview)
             
             tree.pack(side="top", fill="both", expand=True)
             tree_totals.pack(side="bottom", fill="x")
@@ -2588,7 +2849,7 @@ class App(tk.Tk):
             
             tree.tag_configure("evenrow", background=bg_even)
             tree.tag_configure("oddrow", background=bg_odd)
-            tree_totals.tag_configure("totalrow", font=("Segoe UI", 9, "bold"), background=bg_total)
+            tree_totals.tag_configure("totalrow", font=("Segoe UI", 11, "bold"), background=bg_total)
             
             for i, ym in enumerate(period_range):
                 y, m = ym
@@ -2638,7 +2899,7 @@ class App(tk.Tk):
             
             tree = ttk.Treeview(self.content_dash_source, columns=columns, show="headings", height=8, yscrollcommand=v_scroll.set)
             tree_totals = ttk.Treeview(self.content_dash_source, columns=columns, show="", height=1)
-            v_scroll.config(command=tree.yview)
+            v_scroll.configure(command=tree.yview)
             
             tree.pack(side="top", fill="both", expand=True)
             tree_totals.pack(side="bottom", fill="x")
@@ -2660,7 +2921,7 @@ class App(tk.Tk):
             
             tree.tag_configure("evenrow", background=bg_even)
             tree.tag_configure("oddrow", background=bg_odd)
-            tree_totals.tag_configure("totalrow", font=("Segoe UI", 9, "bold"), background=bg_total)
+            tree_totals.tag_configure("totalrow", font=("Segoe UI", 11, "bold"), background=bg_total)
             
             for i, ym in enumerate(period_range):
                 y, m = ym
@@ -2716,7 +2977,7 @@ class App(tk.Tk):
             
             tree = ttk.Treeview(self.content_dash_budget, columns=columns, show="headings", height=10, yscrollcommand=v_scroll.set)
             tree_totals = ttk.Treeview(self.content_dash_budget, columns=columns, show="", height=1)
-            v_scroll.config(command=tree.yview)
+            v_scroll.configure(command=tree.yview)
             
             tree.pack(side="top", fill="both", expand=True)
             tree_totals.pack(side="bottom", fill="x")
@@ -2741,11 +3002,17 @@ class App(tk.Tk):
             bg_even = "#f9fafb" if theme == "light" else "#1e1e1e"
             bg_odd = "#ffffff" if theme == "light" else "#121212"
             bg_total = "#e5e7eb" if theme == "light" else "#27272a"
-            
-            tree.tag_configure("evenrow", background=bg_even)
-            tree.tag_configure("oddrow", background=bg_odd)
-            tree_totals.tag_configure("totalrow", font=("Segoe UI", 9, "bold"), background=bg_total)
-            
+            green_color = "#047857" if theme == "light" else "#059669"
+            red_color = "#B91C1C" if theme == "light" else "#DC2626"
+            normal_color = "#1A2530" if theme == "light" else "#F1F5F9"
+
+            tree.tag_configure("pos_even", background=bg_even, foreground=green_color)
+            tree.tag_configure("pos_odd", background=bg_odd, foreground=green_color)
+            tree.tag_configure("neg_even", background=bg_even, foreground=red_color)
+            tree.tag_configure("neg_odd", background=bg_odd, foreground=red_color)
+            tree.tag_configure("zero_even", background=bg_even, foreground=normal_color)
+            tree.tag_configure("zero_odd", background=bg_odd, foreground=normal_color)
+
             has_rows = False
             total_b = 0.0
             total_a = 0.0
@@ -2767,7 +3034,15 @@ class App(tk.Tk):
                 var_pct_str = f"{var_pct:+.1f}%" if b_amt != 0.0 else "N/A"
                 var_amt_str = f"₦{var_amt:+,.2f}" if var_amt != 0.0 else "₦0.00"
                 
-                tags = ("evenrow",) if row_idx % 2 == 0 else ("oddrow",)
+                if var_amt > 0:
+                    tag_prefix = "neg_"
+                elif var_amt < 0:
+                    tag_prefix = "pos_"
+                else:
+                    tag_prefix = "zero_"
+                tag_suffix = "even" if row_idx % 2 == 0 else "odd"
+                tags = (tag_prefix + tag_suffix,)
+                
                 tree.insert("", tk.END, values=(
                     l,
                     f"₦{b_amt:,.2f}",
@@ -2786,6 +3061,9 @@ class App(tk.Tk):
             total_var_pct = (total_var / total_b * 100.0) if total_b != 0.0 else 0.0
             total_var_pct_str = f"{total_var_pct:+.1f}%" if total_b != 0.0 else "N/A"
             total_var_str = f"₦{total_var:+,.2f}" if total_var != 0.0 else "₦0.00"
+            
+            total_fg = red_color if total_var > 0 else (green_color if total_var < 0 else normal_color)
+            tree_totals.tag_configure("totalrow", font=("Segoe UI", 11, "bold"), background=bg_total, foreground=total_fg)
             
             tree_totals.insert("", tk.END, values=(
                 "TOTAL",
@@ -2995,24 +3273,41 @@ class App(tk.Tk):
                 var_pct_str = f"{var_pct:+.1f}%" if b_amt != 0.0 else "N/A"
                 var_amt_str = f"{var_amt:+,.2f}"
                 
+                if var_amt > 0:
+                    pdf.set_text_color(185, 28, 28)
+                elif var_amt < 0:
+                    pdf.set_text_color(4, 120, 87)
+                else:
+                    pdf.set_text_color(0, 0, 0)
+                
                 pdf.cell(col_widths[0], 8, c, border=1)
                 pdf.cell(col_widths[1], 8, f"{b_amt:,.2f}", border=1, align="R")
                 pdf.cell(col_widths[2], 8, f"{a_amt:,.2f}", border=1, align="R")
                 pdf.cell(col_widths[3], 8, var_amt_str, border=1, align="R")
                 pdf.cell(col_widths[4], 8, var_pct_str, border=1, align="R")
                 pdf.ln()
+                pdf.set_text_color(0, 0, 0)
                 
             total_var = total_a - total_b
             total_var_pct = (total_var / total_b * 100.0) if total_b != 0.0 else 0.0
             total_var_pct_str = f"{total_var_pct:+.1f}%" if total_b != 0.0 else "N/A"
             
             pdf.set_font("helvetica", style="B", size=9)
+            
+            if total_var > 0:
+                pdf.set_text_color(185, 28, 28)
+            elif total_var < 0:
+                pdf.set_text_color(4, 120, 87)
+            else:
+                pdf.set_text_color(0, 0, 0)
+                
             pdf.cell(col_widths[0], 8, "TOTAL", border=1)
             pdf.cell(col_widths[1], 8, f"{total_b:,.2f}", border=1, align="R")
             pdf.cell(col_widths[2], 8, f"{total_a:,.2f}", border=1, align="R")
             pdf.cell(col_widths[3], 8, f"{total_var:+,.2f}", border=1, align="R")
             pdf.cell(col_widths[4], 8, total_var_pct_str, border=1, align="R")
             pdf.ln()
+            pdf.set_text_color(0, 0, 0)
 
         import os
         dirs = self.config_data.get("directories", {})
@@ -3034,98 +3329,100 @@ class App(tk.Tk):
         except Exception as e:
             messagebox.showerror("Print Error", f"An error occurred while printing the report:\n{e}", parent=self)
 
-class PreferencesFrame(ttk.Frame):
+class PreferencesFrame(ctk.CTkFrame):
     def __init__(self, parent_container, app_instance):
-        super().__init__(parent_container, style="TFrame")
+        super().__init__(parent_container, fg_color="transparent")
         self.parent = app_instance
         self.config_data = self.parent.config_data.get("directories", {})
         self.company_info = self.parent.config_data.get("company_info", {})
 
-        main_frame = ttk.Frame(self, padding="20")
-        main_frame.pack(fill="both", expand=True)
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        notebook = ttk.Notebook(main_frame)
-        notebook.pack(fill="both", expand=True, pady=(0, 15))
+        tabview = ctk.CTkTabview(main_frame, segmented_button_font=("Segoe UI", 15, "bold"))
+        tabview.pack(fill="both", expand=True, pady=(0, 15))
 
-        tab_dirs = ttk.Frame(notebook, padding="10")
-        tab_comp = ttk.Frame(notebook, padding="10")
-        notebook.add(tab_dirs, text="Directories")
-        notebook.add(tab_comp, text="Company Profile")
+        tab_dirs = tabview.add("Directories")
+        tab_comp = tabview.add("Company Profile")
 
         # --- Directories Tab ---
-        ttk.Label(tab_dirs, text="Working Directory (New Workbooks):", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 5))
-        frame1 = ttk.Frame(tab_dirs)
+        ctk.CTkLabel(tab_dirs, text="Working Directory (New Workbooks):", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
+        frame1 = ctk.CTkFrame(tab_dirs, fg_color="transparent")
         frame1.pack(fill="x", pady=(0, 15))
-        self.ent_work_dir = ttk.Entry(frame1)
+        self.ent_work_dir = ctk.CTkEntry(frame1)
         self.ent_work_dir.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.ent_work_dir.insert(0, self.config_data.get("working_directory", ""))
-        ttk.Button(frame1, text="Browse...", command=lambda: self.browse_dir(self.ent_work_dir)).pack(side="right")
+        ctk.CTkButton(frame1, text="Browse...", width=90, text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.browse_dir(self.ent_work_dir)).pack(side="right")
 
-        ttk.Label(tab_dirs, text="Dashboard Reports Directory:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 5))
-        frame2 = ttk.Frame(tab_dirs)
+        ctk.CTkLabel(tab_dirs, text="Dashboard Reports Directory:", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(0, 5))
+        frame2 = ctk.CTkFrame(tab_dirs, fg_color="transparent")
         frame2.pack(fill="x", pady=(0, 15))
-        self.ent_rep_dir = ttk.Entry(frame2)
+        self.ent_rep_dir = ctk.CTkEntry(frame2)
         self.ent_rep_dir.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.ent_rep_dir.insert(0, self.config_data.get("reports_directory", ""))
-        ttk.Button(frame2, text="Browse...", command=lambda: self.browse_dir(self.ent_rep_dir)).pack(side="right")
+        ctk.CTkButton(frame2, text="Browse...", width=90, text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.browse_dir(self.ent_rep_dir)).pack(side="right")
 
-        ttk.Label(tab_dirs, text="Transactions Report Directory:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 5))
-        frame_trans_rep = ttk.Frame(tab_dirs)
+        ctk.CTkLabel(tab_dirs, text="Transactions Report Directory:", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(0, 5))
+        frame_trans_rep = ctk.CTkFrame(tab_dirs, fg_color="transparent")
         frame_trans_rep.pack(fill="x", pady=(0, 15))
-        self.ent_trans_rep_dir = ttk.Entry(frame_trans_rep)
+        self.ent_trans_rep_dir = ctk.CTkEntry(frame_trans_rep)
         self.ent_trans_rep_dir.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.ent_trans_rep_dir.insert(0, self.config_data.get("transactions_report_directory", ""))
-        ttk.Button(frame_trans_rep, text="Browse...", command=lambda: self.browse_dir(self.ent_trans_rep_dir)).pack(side="right")
+        ctk.CTkButton(frame_trans_rep, text="Browse...", width=90, text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.browse_dir(self.ent_trans_rep_dir)).pack(side="right")
 
-        ttk.Label(tab_dirs, text="Printed Vouchers Directory:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 5))
-        frame3 = ttk.Frame(tab_dirs)
+        ctk.CTkLabel(tab_dirs, text="Printed Vouchers Directory:", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(0, 5))
+        frame3 = ctk.CTkFrame(tab_dirs, fg_color="transparent")
         frame3.pack(fill="x", pady=(0, 20))
-        self.ent_vouc_dir = ttk.Entry(frame3)
+        self.ent_vouc_dir = ctk.CTkEntry(frame3)
         self.ent_vouc_dir.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.ent_vouc_dir.insert(0, self.config_data.get("vouchers_directory", ""))
-        ttk.Button(frame3, text="Browse...", command=lambda: self.browse_dir(self.ent_vouc_dir)).pack(side="right")
+        ctk.CTkButton(frame3, text="Browse...", width=90, text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.browse_dir(self.ent_vouc_dir)).pack(side="right")
 
         # --- Company Profile Tab ---
-        comp_container = ttk.Frame(tab_comp)
-        comp_container.pack(fill="both", expand=True)
+        comp_container = ctk.CTkFrame(tab_comp, fg_color="transparent")
+        comp_container.pack(fill="both", expand=True, padx=10, pady=10)
 
-        ttk.Label(comp_container, text="Company Name:", font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 5))
-        self.ent_comp_name = ttk.Entry(comp_container, width=50)
-        self.ent_comp_name.grid(row=0, column=1, sticky="w", padx=10, pady=(0, 5))
+        ctk.CTkLabel(comp_container, text="Company Name:", font=("Segoe UI", 13, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        self.ent_comp_name = ctk.CTkEntry(comp_container, width=500)
+        self.ent_comp_name.grid(row=0, column=1, sticky="w", padx=10, pady=(0, 10))
         self.ent_comp_name.insert(0, self.company_info.get("name", ""))
 
-        ttk.Label(comp_container, text="Company Address:", font=("Segoe UI", 10, "bold")).grid(row=1, column=0, sticky="nw", pady=(0, 5))
-        self.ent_comp_addr = tk.Text(comp_container, width=50, height=4, font=("Segoe UI", 9))
-        self.ent_comp_addr.grid(row=1, column=1, sticky="w", padx=10, pady=(0, 5))
+        ctk.CTkLabel(comp_container, text="Company Address:", font=("Segoe UI", 13, "bold")).grid(row=1, column=0, sticky="nw", pady=(0, 10))
+        self.ent_comp_addr = ctk.CTkTextbox(comp_container, width=500, height=80, font=("Segoe UI", 13), corner_radius=6, border_width=2)
+        self.ent_comp_addr.grid(row=1, column=1, sticky="w", padx=10, pady=(0, 10))
         self.ent_comp_addr.insert("1.0", self.company_info.get("address", ""))
 
-        ttk.Label(comp_container, text="Phone Number:", font=("Segoe UI", 10, "bold")).grid(row=2, column=0, sticky="w", pady=(0, 5))
-        self.ent_comp_phone = ttk.Entry(comp_container, width=50)
-        self.ent_comp_phone.grid(row=2, column=1, sticky="w", padx=10, pady=(0, 5))
+        ctk.CTkLabel(comp_container, text="Phone Number:", font=("Segoe UI", 13, "bold")).grid(row=2, column=0, sticky="w", pady=(0, 10))
+        self.ent_comp_phone = ctk.CTkEntry(comp_container, width=500)
+        self.ent_comp_phone.grid(row=2, column=1, sticky="w", padx=10, pady=(0, 10))
         self.ent_comp_phone.insert(0, self.company_info.get("phone", ""))
 
-        ttk.Label(comp_container, text="Email Address:", font=("Segoe UI", 10, "bold")).grid(row=3, column=0, sticky="w", pady=(0, 5))
-        self.ent_comp_email = ttk.Entry(comp_container, width=50)
-        self.ent_comp_email.grid(row=3, column=1, sticky="w", padx=10, pady=(0, 5))
+        ctk.CTkLabel(comp_container, text="Email Address:", font=("Segoe UI", 13, "bold")).grid(row=3, column=0, sticky="w", pady=(0, 10))
+        self.ent_comp_email = ctk.CTkEntry(comp_container, width=500)
+        self.ent_comp_email.grid(row=3, column=1, sticky="w", padx=10, pady=(0, 10))
         self.ent_comp_email.insert(0, self.company_info.get("email", ""))
 
-        ttk.Label(comp_container, text="Website:", font=("Segoe UI", 10, "bold")).grid(row=4, column=0, sticky="w", pady=(0, 5))
-        self.ent_comp_web = ttk.Entry(comp_container, width=50)
-        self.ent_comp_web.grid(row=4, column=1, sticky="w", padx=10, pady=(0, 5))
+        ctk.CTkLabel(comp_container, text="Website:", font=("Segoe UI", 13, "bold")).grid(row=4, column=0, sticky="w", pady=(0, 10))
+        self.ent_comp_web = ctk.CTkEntry(comp_container, width=500)
+        self.ent_comp_web.grid(row=4, column=1, sticky="w", padx=10, pady=(0, 10))
         self.ent_comp_web.insert(0, self.company_info.get("website", ""))
 
-        ttk.Label(comp_container, text="Company Logo:", font=("Segoe UI", 10, "bold")).grid(row=5, column=0, sticky="w", pady=(0, 5))
-        frame_logo = ttk.Frame(comp_container)
-        frame_logo.grid(row=5, column=1, sticky="w", padx=10, pady=(0, 5))
-        self.ent_comp_logo = ttk.Entry(frame_logo, width=40)
+        ctk.CTkLabel(comp_container, text="Company Logo:", font=("Segoe UI", 13, "bold")).grid(row=5, column=0, sticky="w", pady=(0, 10))
+        frame_logo = ctk.CTkFrame(comp_container, fg_color="transparent")
+        frame_logo.grid(row=5, column=1, sticky="w", padx=10, pady=(0, 10))
+        self.ent_comp_logo = ctk.CTkEntry(frame_logo, width=400)
         self.ent_comp_logo.pack(side="left", fill="x", expand=True)
         self.ent_comp_logo.insert(0, self.company_info.get("logo", ""))
-        ttk.Button(frame_logo, text="Browse...", command=self.browse_logo).pack(side="left", padx=(5, 0))
+        ctk.CTkButton(frame_logo, text="Browse...", width=90, text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=self.browse_logo).pack(side="left", padx=(10, 0))
+        
+        self.lbl_logo_preview = ctk.CTkLabel(comp_container, text="")
+        self.lbl_logo_preview.grid(row=0, column=2, rowspan=6, sticky="sw", padx=(40, 0), pady=(0, 10))
+        self.update_logo_preview(self.company_info.get("logo", ""))
 
         # Buttons
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill="x")
-        ttk.Button(btn_frame, text="Save Preferences", command=self.save_preferences).pack(side="right")
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=10)
+        ctk.CTkButton(btn_frame, text="Save Preferences", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=self.save_preferences).pack(side="right")
 
     def browse_logo(self):
         from tkinter import filedialog
@@ -3133,6 +3430,27 @@ class PreferencesFrame(ttk.Frame):
         if file_path:
             self.ent_comp_logo.delete(0, tk.END)
             self.ent_comp_logo.insert(0, file_path)
+            self.update_logo_preview(file_path)
+            
+    def update_logo_preview(self, file_path):
+        import os
+        try:
+            from PIL import Image
+        except ImportError:
+            self.lbl_logo_preview.configure(image="", text="[Pillow missing]")
+            return
+            
+        if file_path and os.path.isfile(file_path):
+            try:
+                img = Image.open(file_path)
+                img.thumbnail((150, 150))
+                ctk_img = ctk.CTkImage(light_image=img, size=img.size)
+                self.lbl_logo_preview.configure(image=ctk_img, text="")
+                self.lbl_logo_preview.image = ctk_img
+            except Exception:
+                self.lbl_logo_preview.configure(image="", text="[Invalid Image]")
+        else:
+            self.lbl_logo_preview.configure(image="", text="[No Logo]")
 
     def browse_dir(self, entry_widget):
         from tkinter import filedialog
@@ -3175,62 +3493,61 @@ class PreferencesFrame(ttk.Frame):
         else:
             self.parent.hide_all_frames()
             if hasattr(self.parent, 'screen_title_label'):
-                self.parent.screen_title_label.config(text="")
+                self.parent.screen_title_label.configure(text="")
 
-class SetupListsFrame(ttk.Frame):
+class SetupListsFrame(ctk.CTkFrame):
     """
     Settings frame that allows dynamic management of Configuration Lists:
     Types, Source Types, and Ledgers. Save updates to config.json immediately.
     """
     def __init__(self, parent_container, app_instance):
-        super().__init__(parent_container, style="TFrame")
+        super().__init__(parent_container, fg_color="transparent")
         self.parent = app_instance
         self.colors = self.parent.colors
-        
+
         # Main layout frame
-        main_frame = ttk.Frame(self, style="TFrame", padding=15)
-        main_frame.pack(fill="both", expand=True)
-        
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
         main_frame.rowconfigure(0, weight=1, uniform="row")
         main_frame.rowconfigure(1, weight=1, uniform="row")
         main_frame.columnconfigure(0, weight=1)
-        
-        top_section = ttk.Frame(main_frame, style="TFrame")
+
+        top_section = ctk.CTkFrame(main_frame, fg_color="transparent")
         top_section.grid(row=0, column=0, sticky="nsew", pady=(0, 10))
         top_section.columnconfigure(0, weight=1, uniform="col")
         top_section.columnconfigure(1, weight=1, uniform="col")
         top_section.rowconfigure(0, weight=1)
-        
-        bottom_section = ttk.Frame(main_frame, style="TFrame")
+
+        bottom_section = ctk.CTkFrame(main_frame, fg_color="transparent")
         bottom_section.grid(row=1, column=0, sticky="nsew")
         bottom_section.columnconfigure(0, weight=1, uniform="col")
         bottom_section.columnconfigure(1, weight=1, uniform="col")
         bottom_section.rowconfigure(0, weight=1)
-        
+
         # Render columns for each data type
         self.create_column(top_section, 0, "Transaction Types", "types")
         self.create_column(top_section, 1, "Source Types", "source_types")
         self.create_ledger_mapping_column(bottom_section, 0, "Ledgers")
         self.create_column(bottom_section, 1, "Financial Report Category", "fin_report_categories")
-        
-        # End of SetupListsFrame init
+
     def create_column(self, parent_frame, col_idx, title, config_key):
         """Creates a stylized column containing a header, listbox, scrollbar, and add/remove buttons."""
-        col_frame = ttk.Frame(parent_frame, style="TFrame", padding=5)
-        col_frame.grid(row=0, column=col_idx, sticky="nsew")
+        col_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        col_frame.grid(row=0, column=col_idx, sticky="nsew", padx=10, pady=10)
         col_frame.rowconfigure(1, weight=1)
         col_frame.columnconfigure(0, weight=1)
-        
+
         # Header
-        lbl_header = ttk.Label(col_frame, text=title, font=("Segoe UI", 11, "bold"), anchor="center")
+        lbl_header = ttk.Label(col_frame, text=title, font=("Segoe UI", 13, "bold"), anchor="center")
         lbl_header.grid(row=0, column=0, pady=(0, 10), sticky="ew")
-        
+
         # Listbox/Scrollbar Container
-        list_container = tk.Frame(col_frame, bg=self.colors["border"])
+        list_container = ctk.CTkFrame(col_frame, fg_color="transparent")
         list_container.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
         list_container.rowconfigure(0, weight=1)
         list_container.columnconfigure(0, weight=1)
-        
+
         # Convert Listbox to Treeview for better grid appearance
         columns = (title,)
         listbox = ttk.Treeview(list_container, columns=columns, show="headings", selectmode="browse")
@@ -3253,7 +3570,7 @@ class SetupListsFrame(ttk.Frame):
         # Scrollbar
         scrollbar = ttk.Scrollbar(list_container, orient="vertical", command=listbox.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
-        listbox.config(yscrollcommand=scrollbar.set)
+        listbox.configure(yscrollcommand=scrollbar.set)
         
         # Load initial items
         items = sorted(self.parent.config_data.get(config_key, []))
@@ -3262,19 +3579,19 @@ class SetupListsFrame(ttk.Frame):
             listbox.insert("", tk.END, values=(item,), tags=(tag,))
             
         # Button controls
-        btn_frame = ttk.Frame(col_frame, style="TFrame")
+        btn_frame = ctk.CTkFrame(col_frame, fg_color="transparent")
         btn_frame.grid(row=2, column=0, sticky="ew")
         btn_frame.columnconfigure(0, weight=1)
         btn_frame.columnconfigure(1, weight=1)
         btn_frame.columnconfigure(2, weight=1)
         
-        btn_add = ttk.Button(btn_frame, text="Add", command=lambda: self.add_item(listbox, config_key))
+        btn_add = ctk.CTkButton(btn_frame, text="Add", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.add_item(listbox, config_key))
         btn_add.grid(row=0, column=0, padx=(0, 2), sticky="ew")
         
-        btn_edit = ttk.Button(btn_frame, text="Edit", command=lambda: self.edit_item(listbox, config_key))
+        btn_edit = ctk.CTkButton(btn_frame, text="Edit", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.edit_item(listbox, config_key))
         btn_edit.grid(row=0, column=1, padx=(2, 2), sticky="ew")
         
-        btn_remove = ttk.Button(btn_frame, text="Remove", command=lambda: self.remove_item(listbox, config_key))
+        btn_remove = ctk.CTkButton(btn_frame, text="Remove", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.remove_item(listbox, config_key))
         btn_remove.grid(row=0, column=2, padx=(2, 0), sticky="ew")
 
     def _get_tree_items(self, tree):
@@ -3361,20 +3678,18 @@ class SetupListsFrame(ttk.Frame):
             listbox.insert("", tk.END, values=(item,), tags=(tag,))
         self.parent.update_config_list(config_key, current_items)
 
-    # on_close removed as it's a frame now
-
     def create_ledger_mapping_column(self, parent_frame, col_idx, title):
-        col_frame = ttk.Frame(parent_frame, style="TFrame", padding=5)
-        col_frame.grid(row=0, column=col_idx, sticky="nsew")
+        col_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        col_frame.grid(row=0, column=col_idx, sticky="nsew", padx=10, pady=10)
         col_frame.rowconfigure(1, weight=1)
         col_frame.columnconfigure(0, weight=1)
 
         # Header
-        lbl_header = ttk.Label(col_frame, text=title, font=("Segoe UI", 11, "bold"), anchor="center")
+        lbl_header = ttk.Label(col_frame, text=title, font=("Segoe UI", 13, "bold"), anchor="center")
         lbl_header.grid(row=0, column=0, pady=(0, 10), sticky="ew")
 
         # Treeview Container
-        list_container = tk.Frame(col_frame, bg=self.colors["border"])
+        list_container = ctk.CTkFrame(col_frame, fg_color="transparent")
         list_container.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
         list_container.rowconfigure(0, weight=1)
         list_container.columnconfigure(0, weight=1)
@@ -3389,7 +3704,7 @@ class SetupListsFrame(ttk.Frame):
 
         scrollbar = ttk.Scrollbar(list_container, orient="vertical", command=tree.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
-        tree.config(yscrollcommand=scrollbar.set)
+        tree.configure(yscrollcommand=scrollbar.set)
         
         if not hasattr(self, 'list_trees'):
             self.list_trees = []
@@ -3411,38 +3726,39 @@ class SetupListsFrame(ttk.Frame):
             tree.insert("", tk.END, values=(ledger, cat), tags=(tag,))
 
         # Button controls
-        btn_frame = ttk.Frame(col_frame, style="TFrame")
+        btn_frame = ctk.CTkFrame(col_frame, fg_color="transparent")
         btn_frame.grid(row=2, column=0, sticky="ew")
         btn_frame.columnconfigure(0, weight=1)
         btn_frame.columnconfigure(1, weight=1)
         btn_frame.columnconfigure(2, weight=1)
 
-        btn_add = ttk.Button(btn_frame, text="Add Ledger", command=lambda: self.add_ledger_item(tree))
+        btn_add = ctk.CTkButton(btn_frame, text="Add Ledger", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.add_ledger_item(tree))
         btn_add.grid(row=0, column=0, padx=(0, 2), sticky="ew")
         
-        btn_edit = ttk.Button(btn_frame, text="Edit Selected", command=lambda: self.edit_ledger_item(tree))
+        btn_edit = ctk.CTkButton(btn_frame, text="Edit Selected", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.edit_ledger_item(tree))
         btn_edit.grid(row=0, column=1, padx=(2, 2), sticky="ew")
 
-        btn_remove = ttk.Button(btn_frame, text="Remove Selected", command=lambda: self.remove_ledger_item(tree))
+        btn_remove = ctk.CTkButton(btn_frame, text="Remove Selected", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.remove_ledger_item(tree))
         btn_remove.grid(row=0, column=2, padx=(2, 0), sticky="ew")
 
     def add_ledger_item(self, tree):
-        dialog = tk.Toplevel(self)
+        dialog = ctk.CTkToplevel(self)
         dialog.title("Add Ledger")
         dialog.geometry("350x200")
         dialog.transient(self)
         dialog.grab_set()
         
-        main_frame = ttk.Frame(dialog, padding=20)
-        main_frame.pack(fill="both", expand=True)
+        main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         ttk.Label(main_frame, text="Ledger Name:").pack(anchor="w", pady=(0, 5))
-        ent_name = ttk.Entry(main_frame, width=30)
+        ent_name = ctk.CTkEntry(main_frame, width=280)
         ent_name.pack(fill="x", pady=(0, 15))
         
         ttk.Label(main_frame, text="Financial Report Category:").pack(anchor="w", pady=(0, 5))
         categories = sorted(self.parent.config_data.get("fin_report_categories", []))
-        cb_category = ttk.Combobox(main_frame, values=categories, state="readonly", width=30)
+        cb_category = ctk.CTkComboBox(main_frame, values=categories, state="readonly", width=280)
+        cb_category.set("")
         cb_category.pack(fill="x", pady=(0, 15))
         
         def on_save():
@@ -3477,7 +3793,7 @@ class SetupListsFrame(ttk.Frame):
                 tree.insert("", tk.END, values=(l, c), tags=(tag,))
             dialog.destroy()
             
-        btn_save = ttk.Button(main_frame, text="Save", command=on_save)
+        btn_save = ctk.CTkButton(main_frame, text="Save", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=on_save)
         btn_save.pack(side="right")
         
         ent_name.focus_set()
@@ -3493,23 +3809,23 @@ class SetupListsFrame(ttk.Frame):
         old_name = item_vals[0]
         old_cat = item_vals[1] if len(item_vals) > 1 else ""
 
-        dialog = tk.Toplevel(self)
+        dialog = ctk.CTkToplevel(self)
         dialog.title("Edit Ledger")
         dialog.geometry("350x200")
         dialog.transient(self)
         dialog.grab_set()
         
-        main_frame = ttk.Frame(dialog, padding=20)
-        main_frame.pack(fill="both", expand=True)
+        main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         ttk.Label(main_frame, text="Ledger Name:").pack(anchor="w", pady=(0, 5))
-        ent_name = ttk.Entry(main_frame, width=30)
+        ent_name = ctk.CTkEntry(main_frame, width=280)
         ent_name.insert(0, old_name)
         ent_name.pack(fill="x", pady=(0, 15))
         
         ttk.Label(main_frame, text="Financial Report Category:").pack(anchor="w", pady=(0, 5))
         categories = sorted(self.parent.config_data.get("fin_report_categories", []))
-        cb_category = ttk.Combobox(main_frame, values=categories, state="readonly", width=30)
+        cb_category = ctk.CTkComboBox(main_frame, values=categories, state="readonly", width=280)
         cb_category.set(old_cat)
         cb_category.pack(fill="x", pady=(0, 15))
         
@@ -3554,7 +3870,7 @@ class SetupListsFrame(ttk.Frame):
                 tree.insert("", tk.END, values=(l, c), tags=(tag,))
             dialog.destroy()
             
-        btn_save = ttk.Button(main_frame, text="Save", command=on_save)
+        btn_save = ctk.CTkButton(main_frame, text="Save", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=on_save)
         btn_save.pack(side="right")
         
         ent_name.focus_set()
@@ -3799,115 +4115,122 @@ class TransactionsReportPDF(fpdf.FPDF):
         # Move cursor below row
         self.set_xy(orig_x, y_start + row_height)
 
-class TransactionsReportFrame(ttk.Frame):
+class TransactionsReportFrame(ctk.CTkFrame):
     """
     Transactions report frame that displays filtered transaction lists
     and exports them to PDF with column-visibility controls.
     """
     def __init__(self, parent_container, app_instance):
-        super().__init__(parent_container, style="TFrame")
+        super().__init__(parent_container, fg_color="transparent")
         self.parent = app_instance
         self.colors = self.parent.colors
-        
+
         # Configure layout weights
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-        
-        main_frame = ttk.Frame(self, style="TFrame", padding=15)
-        main_frame.grid(row=0, column=0, sticky="nsew")
+
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(2, weight=1) # treeview expands
-        
+
         # Create a container for the top scrollable area
-        top_container = ttk.Frame(main_frame, style="TFrame")
+        top_container = ctk.CTkFrame(main_frame, fg_color="transparent")
         top_container.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         top_container.columnconfigure(0, weight=1)
-        
+
         try:
             bg_color = self.winfo_toplevel().colors["bg"]
         except AttributeError:
-            bg_color = "#f3f4f6"
-            
+            bg_color = "#f8f9fa"
+
         top_canvas = tk.Canvas(top_container, bg=bg_color, highlightthickness=0)
         top_hsb = ttk.Scrollbar(top_container, orient="horizontal", command=top_canvas.xview)
-        top_scrollable_frame = ttk.Frame(top_canvas, style="TFrame")
-        
+        top_scrollable_frame = ctk.CTkFrame(top_canvas, fg_color="transparent")
+
         canvas_window = top_canvas.create_window((0, 0), window=top_scrollable_frame, anchor="nw")
         top_canvas.configure(xscrollcommand=top_hsb.set)
-        
+
         top_canvas.grid(row=0, column=0, sticky="ew")
         top_hsb.grid(row=1, column=0, sticky="ew")
-        
+
         def on_frame_configure(event):
             top_canvas.configure(scrollregion=top_canvas.bbox("all"), height=top_scrollable_frame.winfo_reqheight())
         top_scrollable_frame.bind("<Configure>", on_frame_configure)
-        
+
         def on_canvas_configure(event):
             if event.width > top_scrollable_frame.winfo_reqwidth():
                 top_canvas.itemconfig(canvas_window, width=event.width)
         top_canvas.bind("<Configure>", on_canvas_configure)
 
         # Filter panel
-        filter_card = ttk.Frame(top_scrollable_frame, style="Card.TFrame", padding=12)
-        filter_card.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        
+        filter_card = ctk.CTkFrame(top_scrollable_frame, fg_color=self.parent.theme_colors["card"], corner_radius=8, border_width=1, border_color=self.parent.theme_colors["border"])
+        filter_card.grid(row=0, column=0, sticky="ew", pady=(20, 10), padx=10)
+
         for col_idx in range(6):
             filter_card.columnconfigure(col_idx, weight=1)
-            
+
+        lbl_filter_title = ttk.Label(filter_card, text="Filtering Criteria:", font=("Segoe UI", 14, "bold"), style="CardLabel.TLabel")
+        lbl_filter_title.grid(row=0, column=0, columnspan=6, sticky="w", padx=10, pady=(10, 5))
+
         lbl_date_from = ttk.Label(filter_card, text="Date From (DD-MM-YYYY):", style="CardLabel.TLabel")
-        lbl_date_from.grid(row=0, column=0, padx=5, pady=(2, 2), sticky="w")
-        
+        lbl_date_from.grid(row=1, column=0, padx=10, pady=(5, 2), sticky="w")
+
         lbl_date_to = ttk.Label(filter_card, text="Date To (DD-MM-YYYY):", style="CardLabel.TLabel")
-        lbl_date_to.grid(row=0, column=1, padx=5, pady=(2, 2), sticky="w")
-        
+        lbl_date_to.grid(row=1, column=1, padx=10, pady=(5, 2), sticky="w")
+
         lbl_type = ttk.Label(filter_card, text="Type:", style="CardLabel.TLabel")
-        lbl_type.grid(row=0, column=2, padx=5, pady=(2, 2), sticky="w")
-        
+        lbl_type.grid(row=1, column=2, padx=10, pady=(5, 2), sticky="w")
+
         lbl_source = ttk.Label(filter_card, text="Source Type:", style="CardLabel.TLabel")
-        lbl_source.grid(row=0, column=3, padx=5, pady=(2, 2), sticky="w")
-        
+        lbl_source.grid(row=3, column=0, columnspan=2, padx=10, pady=(10, 2), sticky="w")
+
         lbl_ledger = ttk.Label(filter_card, text="Ledger Category:", style="CardLabel.TLabel")
-        lbl_ledger.grid(row=0, column=4, padx=5, pady=(2, 2), sticky="w")
-        
+        lbl_ledger.grid(row=3, column=2, columnspan=2, padx=10, pady=(10, 2), sticky="w")
+
         lbl_fin_cat = ttk.Label(filter_card, text="Financial Report Category:", style="CardLabel.TLabel")
-        lbl_fin_cat.grid(row=0, column=5, padx=5, pady=(2, 2), sticky="w")
-        
-        date_from_container = ttk.Frame(filter_card, style="Card.TFrame")
-        date_from_container.grid(row=1, column=0, padx=5, pady=(0, 5), sticky="w")
-        self.ent_date_from = ttk.Entry(date_from_container, font=("Segoe UI", 10), width=15)
+        lbl_fin_cat.grid(row=3, column=4, columnspan=2, padx=10, pady=(10, 2), sticky="w")
+
+        date_from_container = ctk.CTkFrame(filter_card, fg_color="transparent")
+        date_from_container.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="w")
+        self.ent_date_from = ctk.CTkEntry(date_from_container, width=100)
         self.ent_date_from.pack(side="left")
-        self.btn_date_from_picker = ttk.Button(date_from_container, text="📅", width=3, command=lambda: self.pick_date(self.ent_date_from))
+        self.btn_date_from_picker = ctk.CTkButton(date_from_container, text="📅", width=35, text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.pick_date(self.ent_date_from))
         self.btn_date_from_picker.pack(side="left", padx=(5, 0))
 
-        date_to_container = ttk.Frame(filter_card, style="Card.TFrame")
-        date_to_container.grid(row=1, column=1, padx=5, pady=(0, 5), sticky="w")
-        self.ent_date_to = ttk.Entry(date_to_container, font=("Segoe UI", 10), width=15)
+        date_to_container = ctk.CTkFrame(filter_card, fg_color="transparent")
+        date_to_container.grid(row=2, column=1, padx=10, pady=(0, 10), sticky="w")
+        self.ent_date_to = ctk.CTkEntry(date_to_container, width=100)
         self.ent_date_to.pack(side="left")
-        self.btn_date_to_picker = ttk.Button(date_to_container, text="📅", width=3, command=lambda: self.pick_date(self.ent_date_to))
+        self.btn_date_to_picker = ctk.CTkButton(date_to_container, text="📅", width=35, text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=lambda: self.pick_date(self.ent_date_to))
         self.btn_date_to_picker.pack(side="left", padx=(5, 0))
 
-        self.cb_type = ttk.Combobox(filter_card, font=("Segoe UI", 10), state="readonly", values=[""] + self.parent.config_data.get("types", []), width=25)
-        self.cb_type.grid(row=1, column=2, padx=5, pady=(0, 5), sticky="w")
+        self.cb_type = ctk.CTkComboBox(filter_card, values=[""] + self.parent.config_data.get("types", []), width=120)
+        self.cb_type.grid(row=2, column=2, padx=10, pady=(0, 10), sticky="w")
+        self.cb_type.set("")
 
-        self.cb_source_type = ttk.Combobox(filter_card, font=("Segoe UI", 10), state="readonly", values=[""] + self.parent.config_data.get("source_types", []), width=60)
-        self.cb_source_type.grid(row=1, column=3, padx=5, pady=(0, 5), sticky="w")
+        self.cb_source_type = ctk.CTkComboBox(filter_card, values=[""] + self.parent.config_data.get("source_types", []), width=300)
+        self.cb_source_type.grid(row=4, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="w")
+        self.cb_source_type.set("")
 
-        self.cb_ledger = ttk.Combobox(filter_card, font=("Segoe UI", 10), state="readonly", values=[""] + self.parent.config_data.get("ledgers", []), width=60)
-        self.cb_ledger.grid(row=1, column=4, padx=5, pady=(0, 5), sticky="w")
+        self.cb_ledger = ctk.CTkComboBox(filter_card, values=[""] + self.parent.config_data.get("ledgers", []), width=300)
+        self.cb_ledger.grid(row=4, column=2, columnspan=2, padx=10, pady=(0, 10), sticky="w")
+        self.cb_ledger.set("")
 
-        self.cb_fin_cat = ttk.Combobox(filter_card, font=("Segoe UI", 10), state="readonly", values=[""] + self.parent.config_data.get("fin_report_categories", []), width=60)
-        self.cb_fin_cat.grid(row=1, column=5, padx=5, pady=(0, 5), sticky="w")
-        
+        self.cb_fin_cat = ctk.CTkComboBox(filter_card, values=[""] + self.parent.config_data.get("fin_report_categories", []), width=300)
+        self.cb_fin_cat.grid(row=4, column=4, columnspan=2, padx=10, pady=(0, 10), sticky="w")
+        self.cb_fin_cat.set("")
+
         # Checkboxes Card for PDF columns
-        cb_card = ttk.Frame(top_scrollable_frame, style="Card.TFrame", padding=12)
-        cb_card.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        
-        lbl_cb = ttk.Label(cb_card, text="Include Columns in PDF Export:", font=("Segoe UI", 10, "bold"), style="CardLabel.TLabel")
-        lbl_cb.pack(anchor="w", pady=(0, 5))
-        
-        cb_row = ttk.Frame(cb_card, style="Card.TFrame")
-        cb_row.pack(fill="x")
-        
+        cb_card = ctk.CTkFrame(top_scrollable_frame, fg_color=self.parent.theme_colors["card"], corner_radius=8, border_width=1, border_color=self.parent.theme_colors["border"])
+        cb_card.grid(row=1, column=0, sticky="ew", pady=(0, 10), padx=10)
+
+        lbl_cb = ttk.Label(cb_card, text="Include Columns in PDF Export:", font=("Segoe UI", 13, "bold"), style="CardLabel.TLabel")
+        lbl_cb.pack(anchor="w", pady=(10, 5), padx=10)
+
+        cb_row = ctk.CTkFrame(cb_card, fg_color="transparent")
+        cb_row.pack(fill="x", padx=10, pady=(0, 10))
+
         columns_to_show = [
             ("date", "Date"),
             ("voucher", "Voucher Number"),
@@ -3919,26 +4242,27 @@ class TransactionsReportFrame(ttk.Frame):
             ("fin_cat", "Financial Report Category"),
             ("amount", "Amount")
         ]
-        
+
         self.col_vars = {}
         for col_key, col_title in columns_to_show:
             self.col_vars[col_key] = tk.BooleanVar(value=True)
             self.col_vars[col_key].trace_add("write", lambda *args: self.update_grid_columns())
-            chk = ttk.Checkbutton(cb_row, text=col_title, variable=self.col_vars[col_key])
+            chk = ctk.CTkCheckBox(cb_row, text=col_title, variable=self.col_vars[col_key], text_color=self.parent.theme_colors["text"])
             chk.pack(side="left", padx=10, pady=2)
-            
+
         # Grid frame
-        grid_frame = ttk.Frame(main_frame, style="TFrame")
+        grid_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         grid_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
         grid_frame.rowconfigure(0, weight=1)
         grid_frame.columnconfigure(0, weight=1)
-        
+
         columns = ("No.", "Date", "Voucher Number", "Type", "Source Type", "Source Ref", "Description", "Ledger", "Financial Report Category", "Amount")
         self.tree = ttk.Treeview(grid_frame, columns=columns, show="headings", selectmode="none")
-        
+
         for col in columns:
             anchor = "e" if col == "Amount" else "w"
-            self.tree.heading(col, text=col, anchor=anchor)
+            header_text = "Amount (₦)" if col == "Amount" else col
+            self.tree.heading(col, text=header_text, anchor=anchor)
             if col == "No.":
                 self.tree.column(col, width=50, minwidth=50, anchor=anchor)
             elif col == "Description":
@@ -3947,36 +4271,36 @@ class TransactionsReportFrame(ttk.Frame):
                 self.tree.column(col, width=90, minwidth=80, anchor=anchor)
             else:
                 self.tree.column(col, width=110, minwidth=100, anchor=anchor)
-                
+
         self.tree.grid(row=0, column=0, sticky="nsew")
-        
+
         theme = self.parent.config_data.get("theme", "light")
         even_bg = "#121212" if theme == "dark" else "#f9fafb"
         odd_bg  = "#000000" if theme == "dark" else "#ffffff"
         text_fg = "#f9fafb" if theme == "dark" else "#1f2937"
         self.tree.tag_configure('evenrow', background=even_bg, foreground=text_fg)
         self.tree.tag_configure('oddrow', background=odd_bg, foreground=text_fg)
-        
+
         v_scroll = ttk.Scrollbar(grid_frame, orient="vertical", command=self.tree.yview)
         v_scroll.grid(row=0, column=1, sticky="ns")
         h_scroll = ttk.Scrollbar(grid_frame, orient="horizontal", command=self.tree.xview)
         h_scroll.grid(row=1, column=0, sticky="ew")
         self.tree.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
 
-        self.lbl_record_count = ttk.Label(grid_frame, text="Total Records: 0", font=("Segoe UI", 9, "bold"), foreground="#4b5563")
+        self.lbl_record_count = ttk.Label(grid_frame, text="Total Records: 0", font=("Segoe UI", 11, "bold"), foreground="#64748B")
         self.lbl_record_count.grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
-        
+
         # Bottom toolbar
-        bottom_frame = ttk.Frame(main_frame, style="TFrame")
+        bottom_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         bottom_frame.grid(row=3, column=0, sticky="ew")
-        
-        self.btn_print_report = ttk.Button(bottom_frame, text="Print Report", command=self.print_to_pdf)
+
+        self.btn_print_report = ctk.CTkButton(bottom_frame, text="Print Report", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=self.print_to_pdf)
         self.btn_print_report.pack(side="left")
 
-        self.btn_apply = ttk.Button(bottom_frame, text="Apply Filters", command=self.apply_filters)
+        self.btn_apply = ctk.CTkButton(bottom_frame, text="Apply Filters", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=self.apply_filters)
         self.btn_apply.pack(side="right", padx=(5, 0))
 
-        self.btn_clear_filters = ttk.Button(bottom_frame, text="Clear Filters", command=self.clear_filters)
+        self.btn_clear_filters = ctk.CTkButton(bottom_frame, text="Clear Filters", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=self.clear_filters)
         self.btn_clear_filters.pack(side="right", padx=5)
         
         # Load initial values
@@ -4003,7 +4327,7 @@ class TransactionsReportFrame(ttk.Frame):
         for col_key, col_title in col_mapping.items():
             if self.col_vars[col_key].get():
                 display_cols.append(col_title)
-        self.tree.config(displaycolumns=display_cols)
+        self.tree.configure(displaycolumns=display_cols)
 
     def load_data(self):
         """Loads data from the active workbook into self.all_records and populates the treeview."""
@@ -4153,7 +4477,7 @@ class TransactionsReportFrame(ttk.Frame):
             )
 
         if hasattr(self, "lbl_record_count"):
-            self.lbl_record_count.config(text=f"Total Records: {len(self.filtered_records)}")
+            self.lbl_record_count.configure(text=f"Total Records: {len(self.filtered_records)}")
 
     def clear_filters(self):
         """Clears all filters and displays all records."""
@@ -4327,28 +4651,32 @@ class TransactionsReportFrame(ttk.Frame):
 
     # on_close method removed since it is now a frame
 
-class CalendarDialog(tk.Toplevel):
+class CalendarDialog(ctk.CTkToplevel):
     def __init__(self, parent, target_entry):
         super().__init__(parent)
         self.parent = parent
         self.target_entry = target_entry
         self.title("Select Date")
-        self.geometry("260x220")
+        self.geometry("280x300")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
         
-        # Center dialog
         self.center_window()
         
-        self.colors = parent.colors
-        self.configure(bg=self.colors["bg"])
+        if hasattr(parent, "parent") and hasattr(parent.parent, "theme_colors"):
+            self.colors = parent.parent.theme_colors
+        elif hasattr(parent, "theme_colors"):
+            self.colors = parent.theme_colors
+        else:
+            self.colors = {"bg": "#ffffff", "card": "#ffffff", "text": "#000000", "accent": "#1f6aa5"}
+            
+        self.configure(fg_color=self.colors["bg"])
         
         self.now = datetime.now()
         self.current_year = self.now.year
         self.current_month = self.now.month
         
-        # Parse current date in entry if valid
         entry_val = target_entry.get().strip()
         if entry_val:
             try:
@@ -4358,29 +4686,33 @@ class CalendarDialog(tk.Toplevel):
             except ValueError:
                 pass
                 
-        # Header controls
-        header = ttk.Frame(self, style="TFrame")
-        header.pack(fill="x", pady=5)
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", pady=(10, 5), padx=10)
         
-        btn_prev = ttk.Button(header, text="<", width=3, command=self.prev_month)
-        btn_prev.pack(side="left", padx=5)
+        btn_prev_year = ctk.CTkButton(header, text="<<", width=30, command=self.prev_year)
+        btn_prev_year.pack(side="left", padx=(0, 2))
         
-        self.lbl_month = ttk.Label(header, text="", font=("Segoe UI", 10, "bold"), style="TLabel")
+        btn_prev = ctk.CTkButton(header, text="<", width=30, command=self.prev_month)
+        btn_prev.pack(side="left")
+        
+        self.lbl_month = ctk.CTkLabel(header, text="", font=("Segoe UI", 13, "bold"))
         self.lbl_month.pack(side="left", expand=True)
         
-        btn_next = ttk.Button(header, text=">", width=3, command=self.next_month)
-        btn_next.pack(side="left", padx=5)
+        btn_next_year = ctk.CTkButton(header, text=">>", width=30, command=self.next_year)
+        btn_next_year.pack(side="right")
         
-        # Days frame
-        self.days_frame = ttk.Frame(self, style="TFrame")
-        self.days_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        btn_next = ctk.CTkButton(header, text=">", width=30, command=self.next_month)
+        btn_next.pack(side="right", padx=(0, 2))
+        
+        self.days_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.days_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
         
         self.draw_calendar()
         
     def center_window(self):
         self.update_idletasks()
-        width = 260
-        height = 220
+        width = 280
+        height = 300
         main_win = self.parent.winfo_toplevel()
         main_x = main_win.winfo_rootx()
         main_y = main_win.winfo_rooty()
@@ -4404,54 +4736,59 @@ class CalendarDialog(tk.Toplevel):
             self.current_year += 1
         self.draw_calendar()
         
+    def prev_year(self):
+        self.current_year -= 1
+        self.draw_calendar()
+        
+    def next_year(self):
+        self.current_year += 1
+        self.draw_calendar()
+        
     def draw_calendar(self):
         import calendar
-        # Clear existing buttons
         for child in self.days_frame.winfo_children():
             child.destroy()
             
-        # Month name label
         month_name = calendar.month_name[self.current_month]
-        self.lbl_month.config(text=f"{month_name} {self.current_year}")
+        self.lbl_month.configure(text=f"{month_name} {self.current_year}")
         
-        # Weekday headers
         headers = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
         for idx, h in enumerate(headers):
-            lbl = ttk.Label(self.days_frame, text=h, font=("Segoe UI", 8, "bold"), style="TLabel", anchor="center")
+            lbl = ctk.CTkLabel(self.days_frame, text=h, font=("Segoe UI", 11, "bold"))
             lbl.grid(row=0, column=idx, sticky="ew")
             
-        # Month matrix
         cal = calendar.monthcalendar(self.current_year, self.current_month)
+        accent = self.colors.get("accent", "#1f6aa5")
         for r_idx, week in enumerate(cal, 1):
             for c_idx, day in enumerate(week):
                 if day == 0:
                     continue
-                # Clickable button for each day
-                btn = tk.Button(
+                btn = ctk.CTkButton(
                     self.days_frame,
                     text=str(day),
-                    bg=self.colors["card"],
-                    fg=self.colors["text"],
-                    relief="flat",
-                    font=("Segoe UI", 9),
+                    width=30,
+                    height=30,
+                    font=("Segoe UI", 11),
+                    fg_color="transparent",
+                    text_color=self.colors["text"],
+                    hover_color=accent,
                     command=lambda d=day: self.select_day(d)
                 )
                 btn.grid(row=r_idx, column=c_idx, sticky="nsew", padx=1, pady=1)
                 
-        # Configure weights
         for i in range(7):
             self.days_frame.columnconfigure(i, weight=1)
-        for i in range(6):
+        for i in range(7):
             self.days_frame.rowconfigure(i, weight=1)
             
     def select_day(self, day):
         date_str = f"{day:02d}-{self.current_month:02d}-{self.current_year:04d}"
         orig_state = self.target_entry.cget("state")
-        self.target_entry.config(state="normal")
+        self.target_entry.configure(state="normal")
         self.target_entry.delete(0, tk.END)
         self.target_entry.insert(0, date_str)
         try:
-            self.target_entry.config(state=orig_state)
+            self.target_entry.configure(state=orig_state)
         except Exception:
             pass
         self.grab_release()
