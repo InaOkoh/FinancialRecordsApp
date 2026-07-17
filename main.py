@@ -2703,8 +2703,12 @@ class App(ctk.CTk):
         self.cb_dash_budget_category.set("All Categories")
         self.cb_dash_budget_category.grid(row=0, column=2, sticky="e", padx=(0, 10))
         
+        self.chk_budget_color_var = ctk.StringVar(value="on")
+        self.chk_budget_color = ctk.CTkCheckBox(hdr_budget, text="Print in Color", variable=self.chk_budget_color_var, onvalue="on", offvalue="off", font=("Segoe UI", 12))
+        self.chk_budget_color.grid(row=0, column=3, sticky="e", padx=(0, 10))
+        
         btn_budget_print = ctk.CTkButton(hdr_budget, text="Print Report", width=90, text_color="#ffffff", fg_color=self.theme_colors["accent"], command=lambda: self.export_dashboard_report("budget"))
-        btn_budget_print.grid(row=0, column=3, sticky="e")
+        btn_budget_print.grid(row=0, column=4, sticky="e")
         
         self.content_dash_budget = ctk.CTkFrame(self.card_budget, fg_color="transparent")
         self.content_dash_budget.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
@@ -3347,19 +3351,47 @@ class App(ctk.CTk):
                 var_pct_str = f"{var_pct:+.1f}%" if b_amt != 0.0 else "N/A"
                 var_amt_str = f"{var_amt:+,.2f}"
                 
-                if var_amt > 0:
-                    pdf.set_text_color(185, 28, 28)
-                elif var_amt < 0:
-                    pdf.set_text_color(4, 120, 87)
+                print_color = getattr(self, "chk_budget_color_var", None)
+                use_color = True if not print_color else (print_color.get() == "on")
+                
+                if use_color:
+                    if var_amt > 0:
+                        pdf.set_text_color(185, 28, 28)
+                    elif var_amt < 0:
+                        pdf.set_text_color(4, 120, 87)
+                    else:
+                        pdf.set_text_color(0, 0, 0)
                 else:
                     pdf.set_text_color(0, 0, 0)
                 
-                pdf.cell(col_widths[0], 8, c, border=1)
-                pdf.cell(col_widths[1], 8, f"{b_amt:,.2f}", border=1, align="R")
-                pdf.cell(col_widths[2], 8, f"{a_amt:,.2f}", border=1, align="R")
-                pdf.cell(col_widths[3], 8, var_amt_str, border=1, align="R")
-                pdf.cell(col_widths[4], 8, var_pct_str, border=1, align="R")
-                pdf.ln()
+                x_start = pdf.get_x()
+                y_start = pdf.get_y()
+                
+                text_w = pdf.get_string_width(c)
+                lines = int(text_w / (col_widths[0] - 2)) + 1
+                row_height = max(8, lines * 4 + 4)
+                
+                if y_start + row_height > 275:
+                    pdf.add_page()
+                    y_start = pdf.get_y()
+                    x_start = pdf.get_x()
+                
+                pdf.set_xy(x_start + 1, y_start + 2)
+                pdf.multi_cell(col_widths[0] - 2, 4, c, border=0, align="L")
+                
+                actual_y = pdf.get_y()
+                row_height = max(8, actual_y - y_start + 2)
+                
+                pdf.set_xy(x_start, y_start)
+                pdf.cell(col_widths[0], row_height, "", border=1)
+                
+                pdf.set_xy(x_start + col_widths[0], y_start)
+                pdf.cell(col_widths[1], row_height, f"{b_amt:,.2f}", border=1, align="R")
+                pdf.cell(col_widths[2], row_height, f"{a_amt:,.2f}", border=1, align="R")
+                pdf.cell(col_widths[3], row_height, var_amt_str, border=1, align="R")
+                pdf.cell(col_widths[4], row_height, var_pct_str, border=1, align="R")
+                
+                pdf.set_xy(x_start, y_start + row_height)
                 pdf.set_text_color(0, 0, 0)
                 
             total_var = total_a - total_b
@@ -3368,10 +3400,13 @@ class App(ctk.CTk):
             
             pdf.set_font("helvetica", style="B", size=9)
             
-            if total_var > 0:
-                pdf.set_text_color(185, 28, 28)
-            elif total_var < 0:
-                pdf.set_text_color(4, 120, 87)
+            if use_color:
+                if total_var > 0:
+                    pdf.set_text_color(185, 28, 28)
+                elif total_var < 0:
+                    pdf.set_text_color(4, 120, 87)
+                else:
+                    pdf.set_text_color(0, 0, 0)
             else:
                 pdf.set_text_color(0, 0, 0)
                 
