@@ -285,7 +285,13 @@ class App(ctk.CTk):
         # Configure window properties
         self.is_workbook_valid = True
         self.update_app_title()
-        self.geometry("1200x800")
+        window_width = 1200
+        window_height = 800
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        center_x = int((screen_width - window_width) / 2)
+        center_y = int((screen_height - window_height) / 2)
+        self.geometry(f"{window_width}x{window_height}+{center_x}+{center_y}")
         self.minsize(800, 600)
 
         # Apply premium styles and colors
@@ -3527,6 +3533,59 @@ class PreferencesFrame(ctk.CTkFrame):
             if hasattr(self.parent, 'screen_title_label'):
                 self.parent.screen_title_label.configure(text="")
 
+class CustomInputDialog(ctk.CTkToplevel):
+    def __init__(self, parent, title_text, prompt, initialvalue="", theme_colors=None):
+        super().__init__(parent)
+        self.title(title_text)
+        self.result = None
+        
+        self.transient(parent)
+        self.grab_set()
+        
+        # UI Elements
+        self.lbl_prompt = ctk.CTkLabel(self, text=prompt, font=("Segoe UI", 14, "bold"))
+        self.lbl_prompt.pack(pady=(20, 10), padx=20, anchor="w")
+        
+        self.entry = ctk.CTkEntry(self, font=("Segoe UI", 16), width=360, height=40)
+        self.entry.pack(pady=10, padx=20)
+        self.entry.insert(0, initialvalue)
+        self.entry.focus()
+        self.entry.bind("<Return>", self.on_ok)
+        
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=(10, 20), padx=20, fill="x")
+        
+        accent_color = theme_colors.get("accent", "#0078D7") if theme_colors else "#0078D7"
+        
+        self.btn_ok = ctk.CTkButton(btn_frame, text="OK", command=self.on_ok, width=100, fg_color=accent_color)
+        self.btn_ok.pack(side="right", padx=(10, 0))
+        
+        self.btn_cancel = ctk.CTkButton(btn_frame, text="Cancel", command=self.on_cancel, width=100, fg_color="gray")
+        self.btn_cancel.pack(side="right")
+        
+        # Center on parent after updating geometry
+        self.update_idletasks()
+        width = 420
+        height = 220
+        parent_x = parent.winfo_rootx()
+        parent_y = parent.winfo_rooty()
+        parent_width = parent.winfo_width()
+        parent_height = parent.winfo_height()
+        
+        x = parent_x + (parent_width // 2) - (width // 2)
+        y = parent_y + (parent_height // 2) - (height // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        
+        self.wait_window(self)
+
+    def on_ok(self, event=None):
+        self.result = self.entry.get()
+        self.destroy()
+
+    def on_cancel(self):
+        self.result = None
+        self.destroy()
+
 class SetupListsFrame(ctk.CTkFrame):
     """
     Settings frame that allows dynamic management of Configuration Lists:
@@ -3631,7 +3690,9 @@ class SetupListsFrame(ctk.CTkFrame):
 
     def add_item(self, listbox, config_key):
         """Prompts for a new item, inserts it, and immediately updates the JSON config file."""
-        new_item = simpledialog.askstring("Add Item", f"Enter new value for {config_key.replace('_', ' ').title()}:", parent=self)
+        display_name = config_key.replace('_', ' ').title().replace('Fin ', 'Financial ')
+        dialog = CustomInputDialog(self.parent, "Add Item", f"Enter new value for {display_name}:", theme_colors=self.parent.theme_colors)
+        new_item = dialog.result
         if not new_item:
             return
         
@@ -3663,7 +3724,9 @@ class SetupListsFrame(ctk.CTkFrame):
         item_id = selected_indices[0]
         selected_val = listbox.item(item_id, "values")[0]
 
-        new_val = simpledialog.askstring("Edit Item", f"Edit value for {config_key.replace('_', ' ').title()}:", initialvalue=selected_val, parent=self)
+        display_name = config_key.replace('_', ' ').title().replace('Fin ', 'Financial ')
+        dialog = CustomInputDialog(self.parent, "Edit Item", f"Edit value for {display_name}:", initialvalue=selected_val, theme_colors=self.parent.theme_colors)
+        new_val = dialog.result
         if not new_val or new_val.strip() == selected_val:
             return
 
@@ -3776,23 +3839,25 @@ class SetupListsFrame(ctk.CTkFrame):
     def add_ledger_item(self, tree):
         dialog = ctk.CTkToplevel(self)
         dialog.title("Add Ledger")
-        dialog.geometry("350x200")
         dialog.transient(self)
         dialog.grab_set()
         
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        ttk.Label(main_frame, text="Ledger Name:").pack(anchor="w", pady=(0, 5))
-        ent_name = ctk.CTkEntry(main_frame, width=280)
+        ctk.CTkLabel(main_frame, text="Ledger Name:", font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(0, 5))
+        ent_name = ctk.CTkEntry(main_frame, font=("Segoe UI", 16), width=360, height=40)
         ent_name.pack(fill="x", pady=(0, 15))
         
-        ttk.Label(main_frame, text="Financial Report Category:").pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(main_frame, text="Financial Report Category:", font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(0, 5))
         categories = sorted(self.parent.config_data.get("fin_report_categories", []))
-        cb_category = ctk.CTkComboBox(main_frame, values=categories, state="readonly", width=280)
+        cb_category = ctk.CTkComboBox(main_frame, values=categories, state="readonly", font=("Segoe UI", 16), width=360, height=40)
         cb_category.set("")
         cb_category.pack(fill="x", pady=(0, 15))
         
+        def on_cancel():
+            dialog.destroy()
+            
         def on_save():
             name = ent_name.get().strip()
             category = cb_category.get().strip()
@@ -3825,8 +3890,27 @@ class SetupListsFrame(ctk.CTkFrame):
                 tree.insert("", tk.END, values=(l, c), tags=(tag,))
             dialog.destroy()
             
-        btn_save = ctk.CTkButton(main_frame, text="Save", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=on_save)
-        btn_save.pack(side="right")
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(10, 0))
+        
+        accent_color = self.parent.theme_colors.get("accent", "#0078D7")
+        
+        btn_save = ctk.CTkButton(btn_frame, text="OK", text_color="#ffffff", fg_color=accent_color, width=100, command=on_save)
+        btn_save.pack(side="right", padx=(10, 0))
+        
+        btn_cancel = ctk.CTkButton(btn_frame, text="Cancel", text_color="#ffffff", fg_color="gray", width=100, command=on_cancel)
+        btn_cancel.pack(side="right")
+        
+        dialog.update_idletasks()
+        width = 420
+        height = 320
+        parent_x = self.parent.winfo_rootx()
+        parent_y = self.parent.winfo_rooty()
+        parent_width = self.parent.winfo_width()
+        parent_height = self.parent.winfo_height()
+        x = parent_x + (parent_width // 2) - (width // 2)
+        y = parent_y + (parent_height // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
         
         ent_name.focus_set()
 
@@ -3843,24 +3927,26 @@ class SetupListsFrame(ctk.CTkFrame):
 
         dialog = ctk.CTkToplevel(self)
         dialog.title("Edit Ledger")
-        dialog.geometry("350x200")
         dialog.transient(self)
         dialog.grab_set()
         
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        ttk.Label(main_frame, text="Ledger Name:").pack(anchor="w", pady=(0, 5))
-        ent_name = ctk.CTkEntry(main_frame, width=280)
+        ctk.CTkLabel(main_frame, text="Ledger Name:", font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(0, 5))
+        ent_name = ctk.CTkEntry(main_frame, font=("Segoe UI", 16), width=360, height=40)
         ent_name.insert(0, old_name)
         ent_name.pack(fill="x", pady=(0, 15))
         
-        ttk.Label(main_frame, text="Financial Report Category:").pack(anchor="w", pady=(0, 5))
+        ctk.CTkLabel(main_frame, text="Financial Report Category:", font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(0, 5))
         categories = sorted(self.parent.config_data.get("fin_report_categories", []))
-        cb_category = ctk.CTkComboBox(main_frame, values=categories, state="readonly", width=280)
+        cb_category = ctk.CTkComboBox(main_frame, values=categories, state="readonly", font=("Segoe UI", 16), width=360, height=40)
         cb_category.set(old_cat)
         cb_category.pack(fill="x", pady=(0, 15))
         
+        def on_cancel():
+            dialog.destroy()
+            
         def on_save():
             name = ent_name.get().strip()
             category = cb_category.get().strip()
@@ -3902,8 +3988,27 @@ class SetupListsFrame(ctk.CTkFrame):
                 tree.insert("", tk.END, values=(l, c), tags=(tag,))
             dialog.destroy()
             
-        btn_save = ctk.CTkButton(main_frame, text="Save", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=on_save)
-        btn_save.pack(side="right")
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(10, 0))
+        
+        accent_color = self.parent.theme_colors.get("accent", "#0078D7")
+        
+        btn_save = ctk.CTkButton(btn_frame, text="OK", text_color="#ffffff", fg_color=accent_color, width=100, command=on_save)
+        btn_save.pack(side="right", padx=(10, 0))
+        
+        btn_cancel = ctk.CTkButton(btn_frame, text="Cancel", text_color="#ffffff", fg_color="gray", width=100, command=on_cancel)
+        btn_cancel.pack(side="right")
+        
+        dialog.update_idletasks()
+        width = 420
+        height = 320
+        parent_x = self.parent.winfo_rootx()
+        parent_y = self.parent.winfo_rooty()
+        parent_width = self.parent.winfo_width()
+        parent_height = self.parent.winfo_height()
+        x = parent_x + (parent_width // 2) - (width // 2)
+        y = parent_y + (parent_height // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
         
         ent_name.focus_set()
 
