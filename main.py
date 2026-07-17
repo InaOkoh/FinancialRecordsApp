@@ -611,16 +611,19 @@ class App(ctk.CTk):
             return
 
         # Prompt for year
-        year = simpledialog.askinteger(
-            "New Workbook", 
-            "Enter Year (4-digit integer):", 
-            parent=self, 
-            minvalue=1000, 
-            maxvalue=9999
-        )
+        dialog = CustomInputDialog(self, "New Workbook", "Enter Year (4-digit integer):", theme_colors=self.theme_colors)
         
         # If user cancels or closes dialog
-        if year is None:
+        if dialog.result is None or str(dialog.result).strip() == "":
+            return
+            
+        try:
+            year = int(dialog.result)
+            if not (1000 <= year <= 9999):
+                messagebox.showerror("Invalid Input", "Please enter a valid 4-digit year (e.g., 2026).", parent=self)
+                return
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid integer for the year.", parent=self)
             return
 
         # Determine target directory
