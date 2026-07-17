@@ -1563,16 +1563,54 @@ class App(ctk.CTk):
 
     def show_about_dialog(self):
         """Displays the 'Help > About' dialog with details about the app."""
-        messagebox.showinfo(
-            "About Financial Records Manager",
-            "Financial Records Manager\n"
-            "Version 1.1.0\n\n"
+        about_win = ctk.CTkToplevel(self)
+        about_win.title("About Financial Records Manager")
+        about_win.geometry("480x320")
+        about_win.resizable(False, False)
+        
+        # Center the window relative to the main app window
+        about_win.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 480) // 2
+        y = self.winfo_y() + (self.winfo_height() - 320) // 2
+        about_win.geometry(f"+{x}+{y}")
+        
+        # Make it modal
+        about_win.transient(self)
+        about_win.grab_set()
+
+        title_font = ctk.CTkFont(family="Segoe UI", size=20, weight="bold")
+        text_font = ctk.CTkFont(family="Segoe UI", size=13)
+        
+        lbl_title = ctk.CTkLabel(
+            about_win, 
+            text="Financial Records Manager\nVersion 1.1.0", 
+            font=title_font, 
+            justify="center"
+        )
+        lbl_title.pack(pady=(30, 15))
+        
+        desc = (
             "A premium accounting and budgeting solution featuring a modernized interface, "
             "interactive dashboard analytics, comprehensive Excel-based transaction tracking, "
             "dynamic year projections, and accessible PDF voucher generation.\n\n"
-            "Powered by Python, CustomTkinter, Openpyxl, Matplotlib, and fpdf2.",
-            parent=self
+            "Powered by Python, CustomTkinter, Openpyxl, Matplotlib, and fpdf2."
         )
+        lbl_desc = ctk.CTkLabel(
+            about_win, 
+            text=desc, 
+            font=text_font, 
+            wraplength=420, 
+            justify="center"
+        )
+        lbl_desc.pack(padx=20, pady=(0, 20))
+        
+        btn_close = ctk.CTkButton(
+            about_win, 
+            text="Close", 
+            command=about_win.destroy, 
+            width=120
+        )
+        btn_close.pack(pady=(10, 20))
 
     def pick_date(self):
         CalendarDialog(self, self.ent_date)
