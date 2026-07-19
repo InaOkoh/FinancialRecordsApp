@@ -1,4 +1,5 @@
-('D:\\Evincope\\FinancialRecordsApp\\build\\Financial Records '
+('D:\\Evincope\\Financial '
+ 'Records\\FinancialRecordsAppProject\\build\\Financial Records '
  'Manager\\PYZ-00.pyz',
  [('PIL',
    'C:\\Users\\hp\\AppData\\Roaming\\Python\\Python313\\site-packages\\PIL\\__init__.py',

@@ -1,4 +1,5 @@
-('D:\\Evincope\\FinancialRecordsApp\\build\\Financial Records '
+('D:\\Evincope\\Financial '
+ 'Records\\FinancialRecordsAppProject\\build\\Financial Records '
  'Manager\\Financial Records Manager.exe',
  False,
  False,
@@ -30,31 +31,38 @@
  None,
  None,
  None,
- 'D:\\Evincope\\FinancialRecordsApp\\build\\Financial Records '
+ 'D:\\Evincope\\Financial '
+ 'Records\\FinancialRecordsAppProject\\build\\Financial Records '
  'Manager\\Financial Records Manager.pkg',
  [('pyi-contents-directory _internal', '', 'OPTION'),
   ('PYZ-00.pyz',
-   'D:\\Evincope\\FinancialRecordsApp\\build\\Financial Records '
+   'D:\\Evincope\\Financial '
+   'Records\\FinancialRecordsAppProject\\build\\Financial Records '
    'Manager\\PYZ-00.pyz',
    'PYZ'),
   ('struct',
-   'D:\\Evincope\\FinancialRecordsApp\\build\\Financial Records '
+   'D:\\Evincope\\Financial '
+   'Records\\FinancialRecordsAppProject\\build\\Financial Records '
    'Manager\\localpycs\\struct.pyc',
    'PYMODULE'),
   ('pyimod01_archive',
-   'D:\\Evincope\\FinancialRecordsApp\\build\\Financial Records '
+   'D:\\Evincope\\Financial '
+   'Records\\FinancialRecordsAppProject\\build\\Financial Records '
    'Manager\\localpycs\\pyimod01_archive.pyc',
    'PYMODULE'),
   ('pyimod02_importers',
-   'D:\\Evincope\\FinancialRecordsApp\\build\\Financial Records '
+   'D:\\Evincope\\Financial '
+   'Records\\FinancialRecordsAppProject\\build\\Financial Records '
    'Manager\\localpycs\\pyimod02_importers.pyc',
    'PYMODULE'),
   ('pyimod03_ctypes',
-   'D:\\Evincope\\FinancialRecordsApp\\build\\Financial Records '
+   'D:\\Evincope\\Financial '
+   'Records\\FinancialRecordsAppProject\\build\\Financial Records '
    'Manager\\localpycs\\pyimod03_ctypes.pyc',
    'PYMODULE'),
   ('pyimod04_pywin32',
-   'D:\\Evincope\\FinancialRecordsApp\\build\\Financial Records '
+   'D:\\Evincope\\Financial '
+   'Records\\FinancialRecordsAppProject\\build\\Financial Records '
    'Manager\\localpycs\\pyimod04_pywin32.pyc',
    'PYMODULE'),
   ('pyiboot01_bootstrap',
@@ -84,11 +92,13 @@
   ('pyi_rth__tkinter',
    'C:\\Users\\hp\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth__tkinter.py',
    'PYSOURCE'),
-  ('main', 'D:\\Evincope\\FinancialRecordsApp\\main.py', 'PYSOURCE')],
+  ('main',
+   'D:\\Evincope\\Financial Records\\FinancialRecordsAppProject\\main.py',
+   'PYSOURCE')],
  [],
  False,
  False,
- 1784330381,
+ 1784497703,
  [('runw.exe',
    'C:\\Users\\hp\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\runw.exe',
    'EXECUTABLE')],
