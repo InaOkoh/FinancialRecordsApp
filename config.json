@@ -6,8 +6,6 @@
     ],
     "source_types": [
         "Payment Voucher",
-        "E-Learning Revenue Report",
-        "TallyPrime Integrated Mobile Solution Revenue Report",
         "Receipt Voucher"
     ],
     "ledgers": [
@@ -26,7 +24,8 @@
         "Google AI Pro Annual Subscription",
         "Furniture, Fixtures and Fittings",
         "Computer and IT Equipment",
-        "Office Equipment"
+        "Office Equipment",
+        "Marketing and Publicity"
     ],
     "theme": "dark",
     "fin_report_categories": [
@@ -59,13 +58,14 @@
         "Furniture, Fixtures and Fittings": "Fixed Assets",
         "Computer and IT Equipment": "Fixed Assets",
         "Web Hosting Services Annual Subscription": "Administrative Overhead",
-        "Office Equipment": "Fixed Assets"
+        "Office Equipment": "Fixed Assets",
+        "Marketing and Publicity": "Marketing and Sales Overhead"
     },
     "directories": {
-        "working_directory": "D:/Evincope/FinancialRecords/Workbooks",
-        "reports_directory": "D:/Evincope/FinancialRecords/Dashboard Reports",
-        "transactions_report_directory": "D:/Evincope/FinancialRecords/Transactions Reports",
-        "vouchers_directory": "D:/Evincope/FinancialRecords/Vouchers"
+        "working_directory": "D:/Evincope/Financial Records/Financial Records Data/Data",
+        "reports_directory": "D:/Evincope/Financial Records/Financial Records Reports/Dashboard Reports",
+        "transactions_report_directory": "D:/Evincope/Financial Records/Financial Records Reports/Transactions Reports",
+        "vouchers_directory": "D:/Evincope/Financial Records/Financial Records Reports/Vouchers"
     },
     "company_info": {
         "name": "Evincope Limited",
@@ -73,6 +73,6 @@
         "phone": "08035990431",
         "email": "info@evincope.com",
         "website": "www.evincope.com",
-        "logo": "D:/FilesInOneDrive/Evincope Limited Startup Artifact/Company Logo/Evincope-Black/01-Original-Transparent (Phone).png"
+        "logo": "D:/Evincope/Financial Records/Financial Records Manager/evincope logo.png"
     }
 }

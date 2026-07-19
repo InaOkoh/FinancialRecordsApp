@@ -36,6 +36,75 @@ try:
 except ImportError:
     fpdf = None
 
+class CheckboxDropdown(ctk.CTkFrame):
+    def __init__(self, master, values, command=None, width=200, **kwargs):
+        super().__init__(master, fg_color="transparent", **kwargs)
+        self.values = values
+        self.command = command
+        self.selected_categories = ["All Categories"]
+        self.vars = {}
+        
+        self.label = ctk.CTkLabel(self, text="Filter by Financial Report Category:", font=("Segoe UI", 11), text_color="gray")
+        self.label.pack(side="top", anchor="w", pady=(0, 2))
+        
+        self.button = ctk.CTkButton(self, text="Select Categories ▼", width=width, 
+                                    border_width=1,
+                                    command=self.toggle_dropdown)
+        self.button.pack(fill="both", expand=True)
+        self.toplevel = None
+
+    def get(self):
+        return self.selected_categories
+        
+    def toggle_dropdown(self):
+        if self.toplevel and self.toplevel.winfo_exists():
+            self.toplevel.destroy()
+            self.toplevel = None
+        else:
+            self.toplevel = ctk.CTkToplevel(self.winfo_toplevel())
+            self.toplevel.overrideredirect(True)
+            self.toplevel.attributes("-topmost", True)
+            
+            x = self.button.winfo_rootx()
+            y = self.button.winfo_rooty() + self.button.winfo_height()
+            self.toplevel.geometry(f"{self.button.winfo_width()}x200+{x}+{y}")
+            
+            frame = ctk.CTkFrame(self.toplevel, border_width=1)
+            frame.pack(fill="both", expand=True)
+            
+            btn_apply = ctk.CTkButton(frame, text="Apply Filter", height=24, command=self.apply)
+            btn_apply.pack(side="bottom", pady=5, padx=5, fill="x")
+
+            sf = ctk.CTkScrollableFrame(frame, fg_color="transparent")
+            sf.pack(side="top", fill="both", expand=True, padx=2, pady=2)
+            
+            for val in self.values:
+                var = ctk.StringVar(value="1" if val in self.selected_categories else "0")
+                self.vars[val] = var
+                cb = ctk.CTkCheckBox(sf, text=val, variable=var, onvalue="1", offvalue="0",
+                                     command=lambda v=val: self.on_checkbox_click(v))
+                cb.pack(padx=5, pady=5, anchor="w")
+
+    def on_checkbox_click(self, toggled_val):
+        if toggled_val == "All Categories" and self.vars["All Categories"].get() == "1":
+            for val, var in self.vars.items():
+                if val != "All Categories":
+                    var.set("0")
+        elif toggled_val != "All Categories" and self.vars[toggled_val].get() == "1":
+            if "All Categories" in self.vars:
+                self.vars["All Categories"].set("0")
+
+    def apply(self):
+        self.selected_categories = [val for val, var in self.vars.items() if var.get() == "1"]
+        if not self.selected_categories or "All Categories" in self.selected_categories:
+            self.selected_categories = ["All Categories"]
+            
+        if self.command:
+            self.command()
+            
+        self.toggle_dropdown()
+
+
 def number_to_words(amount):
     """
     Converts a numeric amount into English words representation.
@@ -2696,15 +2765,12 @@ class App(ctk.CTk):
         lbl_budget_title = ttk.Label(hdr_budget, text="Budget Performance Report", style="Header.TLabel", font=("Segoe UI", 13, "bold"))
         lbl_budget_title.grid(row=0, column=0, sticky="w")
         
-        lbl_filter = ctk.CTkLabel(hdr_budget, text="Filter by Financial Report Category:", font=("Segoe UI", 12), fg_color="transparent")
-        lbl_filter.grid(row=0, column=1, sticky="e", padx=(0, 5))
-        
-        self.cb_dash_budget_category = ctk.CTkComboBox(hdr_budget, values=["All Categories"] + self.config_data.get("fin_report_categories", []), font=("Segoe UI", 13), width=250, command=lambda e: self.render_budget_performance())
-        self.cb_dash_budget_category.set("All Categories")
-        self.cb_dash_budget_category.grid(row=0, column=2, sticky="e", padx=(0, 10))
+        cats = ["All Categories"] + self.config_data.get("fin_report_categories", [])
+        self.list_budget_category = CheckboxDropdown(hdr_budget, values=cats, width=250, command=lambda: self.render_budget_performance())
+        self.list_budget_category.grid(row=0, column=2, sticky="e", padx=(0, 10))
         
         self.chk_budget_color_var = ctk.StringVar(value="on")
-        self.chk_budget_color = ctk.CTkCheckBox(hdr_budget, text="Print in Color", variable=self.chk_budget_color_var, onvalue="on", offvalue="off", font=("Segoe UI", 12))
+        self.chk_budget_color = ctk.CTkCheckBox(hdr_budget, text="Highlight Variance", variable=self.chk_budget_color_var, onvalue="on", offvalue="off", font=("Segoe UI", 12), command=lambda: self.render_budget_performance())
         self.chk_budget_color.grid(row=0, column=3, sticky="e", padx=(0, 10))
         
         btn_budget_print = ctk.CTkButton(hdr_budget, text="Print Report", width=90, text_color="#ffffff", fg_color=self.theme_colors["accent"], command=lambda: self.export_dashboard_report("budget"))
@@ -3017,12 +3083,19 @@ class App(ctk.CTk):
             child.destroy()
             
         all_ledgers = self.config_data.get("ledgers", ["Sales", "Purchases", "Expenses", "Income"])
-        selected_category = getattr(self, "cb_dash_budget_category", None)
-        if selected_category and selected_category.get() != "All Categories":
-            mapping = self.config_data.get("ledger_category_mapping", {})
-            ledgers = [l for l in all_ledgers if mapping.get(l, "Uncategorized") == selected_category.get()]
-        else:
+        dropdown = getattr(self, "list_budget_category", None)
+        selected_categories = dropdown.get() if dropdown else []
+            
+        if not selected_categories or "All Categories" in selected_categories:
             ledgers = all_ledgers
+            filter_text = "All Categories"
+        else:
+            mapping = self.config_data.get("ledger_category_mapping", {})
+            ledgers = [l for l in all_ledgers if mapping.get(l, "Uncategorized") in selected_categories]
+            filter_text = ", ".join(selected_categories)
+            
+        lbl_criteria = ctk.CTkLabel(self.content_dash_budget, text=f"Filtering By: {filter_text}", font=("Segoe UI", 11, "italic"), text_color="gray")
+        lbl_criteria.pack(side="top", anchor="w", pady=(0, 5))
         
         budget_data = {ym: {l: 0.0 for l in ledgers} for ym in period_range}
         for b in self.dash_budget_data:
@@ -3076,10 +3149,14 @@ class App(ctk.CTk):
             red_color = "#B91C1C" if theme == "light" else "#F87171"
             normal_color = "#1A2530" if theme == "light" else "#F1F5F9"
 
-            tree.tag_configure("pos_even", background=bg_even, foreground=green_color)
-            tree.tag_configure("pos_odd", background=bg_odd, foreground=green_color)
-            tree.tag_configure("neg_even", background=bg_even, foreground=red_color)
-            tree.tag_configure("neg_odd", background=bg_odd, foreground=red_color)
+            use_color = getattr(self, "chk_budget_color_var", None) and self.chk_budget_color_var.get() == "on"
+            pos_color = green_color if use_color else normal_color
+            neg_color = red_color if use_color else normal_color
+
+            tree.tag_configure("pos_even", background=bg_even, foreground=pos_color)
+            tree.tag_configure("pos_odd", background=bg_odd, foreground=pos_color)
+            tree.tag_configure("neg_even", background=bg_even, foreground=neg_color)
+            tree.tag_configure("neg_odd", background=bg_odd, foreground=neg_color)
             tree.tag_configure("zero_even", background=bg_even, foreground=normal_color)
             tree.tag_configure("zero_odd", background=bg_odd, foreground=normal_color)
 
@@ -3132,7 +3209,10 @@ class App(ctk.CTk):
             total_var_pct_str = f"{total_var_pct:+.1f}%" if total_b != 0.0 else "N/A"
             total_var_str = f"₦{total_var:+,.2f}" if total_var != 0.0 else "₦0.00"
             
-            total_fg = red_color if total_var > 0 else (green_color if total_var < 0 else normal_color)
+            if use_color:
+                total_fg = red_color if total_var > 0 else (green_color if total_var < 0 else normal_color)
+            else:
+                total_fg = normal_color
             tree_totals.tag_configure("totalrow", font=("Segoe UI", 11, "bold"), background=bg_total, foreground=total_fg)
             
             tree_totals.insert("", tk.END, values=(
@@ -3180,6 +3260,7 @@ class App(ctk.CTk):
         pdf.add_page()
         pdf.set_font("helvetica", style="B", size=16)
         
+        subtitle = ""
         if report_type == "type":
             title = "Monthly Summary by Transaction Type"
             categories = self.config_data.get("types", [])
@@ -3201,11 +3282,13 @@ class App(ctk.CTk):
         elif report_type == "budget":
             title = "Budget Performance Report"
             all_ledgers = self.config_data.get("ledgers", [])
-            selected_category = getattr(self, "cb_dash_budget_category", None)
-            if selected_category and selected_category.get() != "All Categories":
+            dropdown = getattr(self, "list_budget_category", None)
+            selected_categories = dropdown.get() if dropdown else []
+                
+            if selected_categories and "All Categories" not in selected_categories:
                 mapping = self.config_data.get("ledger_category_mapping", {})
-                categories = [l for l in all_ledgers if mapping.get(l, "Uncategorized") == selected_category.get()]
-                title += f" ({selected_category.get()})"
+                categories = [l for l in all_ledgers if mapping.get(l, "Uncategorized") in selected_categories]
+                subtitle = f"(Filtered By: {', '.join(selected_categories)})"
             else:
                 categories = all_ledgers
 
@@ -3264,10 +3347,16 @@ class App(ctk.CTk):
 
         pdf.set_font("helvetica", "B", 14)
         pdf.set_text_color(30, 58, 138)
-        pdf.cell(0, 10, title, new_x="LMARGIN", new_y="NEXT", align="C")
+        pdf.multi_cell(0, 10, title, new_x="LMARGIN", new_y="NEXT", align="C")
+        
+        if subtitle:
+            pdf.set_font("helvetica", "", 10)
+            pdf.multi_cell(0, 6, subtitle, new_x="LMARGIN", new_y="NEXT", align="C")
+            
         pdf.set_font("helvetica", size=10)
         pdf.set_text_color(75, 85, 99)
-        pdf.cell(0, 8, f"Period: {self.cb_dash_from_month.get()} {from_y} to {self.cb_dash_to_month.get()} {to_y}", new_x="LMARGIN", new_y="NEXT", align="C")
+        pdf.multi_cell(0, 6, f"Period: {self.cb_dash_from_month.get()} {from_y} to {self.cb_dash_to_month.get()} {to_y}", new_x="LMARGIN", new_y="NEXT", align="C")
+        pdf.ln(5)
         
         font_family = "helvetica"
         naira_symbol = "NGN"
@@ -3338,6 +3427,10 @@ class App(ctk.CTk):
             pdf.set_font("helvetica", size=9)
             total_b = 0.0
             total_a = 0.0
+            
+            print_color = getattr(self, "chk_budget_color_var", None)
+            use_color = True if not print_color else (print_color.get() == "on")
+            
             for c in categories:
                 b_amt = sum(budget_data[ym][c] for ym in period_range)
                 a_amt = sum(actual_data[ym][c] for ym in period_range)
@@ -3350,9 +3443,6 @@ class App(ctk.CTk):
                 var_pct = (var_amt / b_amt * 100.0) if b_amt != 0.0 else 0.0
                 var_pct_str = f"{var_pct:+.1f}%" if b_amt != 0.0 else "N/A"
                 var_amt_str = f"{var_amt:+,.2f}"
-                
-                print_color = getattr(self, "chk_budget_color_var", None)
-                use_color = True if not print_color else (print_color.get() == "on")
                 
                 if use_color:
                     if var_amt > 0:
@@ -3427,7 +3517,11 @@ class App(ctk.CTk):
             
         os.makedirs(reports_dir, exist_ok=True)
         
-        filename = f"{title.replace(' ', '_')}_{from_y}_{from_m}_to_{to_y}_{to_m}.pdf"
+        full_title_for_filename = title + ("_Filtered" if subtitle else "")
+        safe_title = full_title_for_filename.replace("\n", "_").replace(":", "_").replace(" ", "_").replace("(", "").replace(")", "")
+        if len(safe_title) > 100:
+            safe_title = safe_title[:100] + "..."
+        filename = f"{safe_title}_{from_y}_{from_m}_to_{to_y}_{to_m}.pdf"
         pdf_path = os.path.join(reports_dir, filename)
         
         try:
