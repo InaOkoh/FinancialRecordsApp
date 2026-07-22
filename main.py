@@ -1041,13 +1041,7 @@ class App(ctk.CTk):
             ws_trans = wb["TransactionEntries"]
             trans_records = []
             
-            type_filter = ""
-            if hasattr(self, 'cb_type'):
-                try:
-                    if self.cb_type.winfo_exists():
-                        type_filter = self.cb_type.get()
-                except Exception:
-                    pass
+            type_filter = getattr(self, 'current_type_filter', "")
                     
             for row_idx in range(2, ws_trans.max_row + 1):
                 row_vals = [ws_trans.cell(row=row_idx, column=c).value for c in range(1, 10)]
@@ -1079,14 +1073,28 @@ class App(ctk.CTk):
                 
                 date_val = str(row_vals[0] or "").strip()
                 try:
-                    sort_date = datetime.strptime(date_val, "%d-%m-%Y").strftime("%Y-%m-%d")
+                    sort_date = datetime.strptime(date_val, "%d-%m-%Y").date()
                 except ValueError:
-                    sort_date = date_val
+                    try:
+                        sort_date = datetime.strptime(date_val, "%Y-%m-%d").date()
+                    except ValueError:
+                        try:
+                            sort_date = datetime.strptime(date_val, "%d/%m/%Y").date()
+                        except ValueError:
+                            sort_date = datetime.min.date()
 
                 try:
                     sort_voucher = float(row_vals[1])
                 except (ValueError, TypeError):
-                    sort_voucher = float('inf')
+                    sort_voucher = float('-inf')
+                    
+                try:
+                    sort_source_ref = float(row_vals[4])
+                except (ValueError, TypeError):
+                    sort_source_ref = float('-inf')
+                    
+                sort_type = str(row_vals[2] or "").lower().strip()
+                sort_source_type = str(row_vals[3] or "").lower().strip()
 
                 record = (
                     row_idx,
@@ -1099,13 +1107,15 @@ class App(ctk.CTk):
                     row_vals[6],
                     row_vals[7],
                     row_vals[8],
-                    sort_voucher,           # sort_voucher
-                    sort_date               # sort_date
+                    sort_date,
+                    sort_type,
+                    sort_voucher,
+                    sort_source_type,
+                    sort_source_ref
                 )
                 trans_records.append(record)
                 
-            # Sort by Voucher Number descending, then Date descending
-            trans_records.sort(key=lambda r: (r[10], r[11]), reverse=True)
+            trans_records.sort(key=lambda r: (r[10], r[11], r[12], r[13], r[14]), reverse=True)
             
             for index, r in enumerate(trans_records):
                 row_tag = 'evenrow' if index % 2 == 0 else 'oddrow'
@@ -1285,6 +1295,7 @@ class App(ctk.CTk):
             return
             
         self.clear_form()
+        self.current_retrieved_excel_row_idx = int(vals[0])
         self.ent_date.insert(0, vals[1])
         self.ent_voucher.insert(0, vals[2])
         self.cb_type.set(vals[3])
@@ -1297,6 +1308,11 @@ class App(ctk.CTk):
             self.ent_amount.insert(0, f"{amt_float:,.2f}")
         except (ValueError, TypeError):
             self.ent_amount.insert(0, vals[9])
+            
+        if hasattr(self, 'btn_add') and self.btn_add:
+            self.btn_add.configure(state="disabled")
+            self.btn_delete.configure(state="disabled")
+            self.btn_retrieve.configure(state="disabled")
 
     def update_transaction(self):
         """Updates the selected transaction row in the Excel workbook with current form data."""
@@ -1304,16 +1320,18 @@ class App(ctk.CTk):
             return
             
         selected_item = self.tree.selection()
-        if not selected_item:
-            messagebox.showwarning("No Selection", "Please select a record from the grid to update.", parent=self)
+        if selected_item:
+            tree_vals = self.tree.item(selected_item, "values")
+            excel_row_idx = int(tree_vals[0])
+        elif hasattr(self, 'current_retrieved_excel_row_idx') and self.current_retrieved_excel_row_idx:
+            excel_row_idx = self.current_retrieved_excel_row_idx
+        else:
+            messagebox.showwarning("No Selection", "Please select a record from the grid or retrieve a record to update.", parent=self)
             return
             
         vals = self.validate_inputs()
         if not vals:
             return
-            
-        tree_vals = self.tree.item(selected_item, "values")
-        excel_row_idx = int(tree_vals[0])
         
         try:
             wb = openpyxl.load_workbook(self.current_workbook_path)
@@ -1376,17 +1394,37 @@ class App(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to delete transaction:\n{e}", parent=self)
 
-    def clear_form(self):
+    def clear_form(self, full_clear=False):
         """Clears all input fields in the Transaction Entry form."""
         self.ent_date.delete(0, tk.END)
         self.ent_voucher.delete(0, tk.END)
-        self.cb_type.set("")
         self.cb_source_type.set("")
         self.ent_source_ref.delete(0, tk.END)
         self.ent_desc.delete(0, tk.END)
         self.cb_ledger.set("")
         self.ent_amount.delete(0, tk.END)
         
+        if hasattr(self, 'btn_add') and self.btn_add:
+            self.btn_add.configure(state="normal")
+            self.btn_delete.configure(state="normal")
+            self.btn_retrieve.configure(state="normal")
+        
+        self.current_retrieved_excel_row_idx = None
+        
+        if full_clear:
+            self.cb_type.set("")
+            self.current_type_filter = ""
+        else:
+            if hasattr(self, 'current_type_filter') and self.current_type_filter:
+                self.cb_type.set(self.current_type_filter)
+            else:
+                self.cb_type.set("")
+        
+        self.load_workbook_data()
+
+    def on_type_filter_changed(self, val):
+        """Called when the user manually changes the Type dropdown filter."""
+        self.current_type_filter = val
         self.load_workbook_data()
 
     def on_tree_select(self, event=None):
@@ -2391,17 +2429,17 @@ class App(ctk.CTk):
         left_top_row.grid(row=0, column=0, pady=(0, 10), sticky="ew")
 
         # Configure four columns for Type, Date, Voucher Number, and Source Ref
-        left_top_row.columnconfigure(0, weight=0, minsize=250)
-        left_top_row.columnconfigure(1, weight=0, minsize=160)
-        left_top_row.columnconfigure(2, weight=0, minsize=160)
-        left_top_row.columnconfigure(3, weight=0, minsize=160)
+        left_top_row.columnconfigure(0, weight=0)
+        left_top_row.columnconfigure(1, weight=0)
+        left_top_row.columnconfigure(2, weight=0)
+        left_top_row.columnconfigure(3, weight=0)
         # Dummy column to absorb extra space so fields cluster on the left
         left_top_row.columnconfigure(4, weight=1)
 
         # Column 0: Type
         lbl_type = ttk.Label(left_top_row, text="Type:", style="CardLabel.TLabel")
         lbl_type.grid(row=0, column=0, pady=(5, 2), sticky="w")
-        self.cb_type = ctk.CTkComboBox(left_top_row, font=("Segoe UI", 16), width=235, command=lambda val: self.load_workbook_data())
+        self.cb_type = ctk.CTkComboBox(left_top_row, font=("Segoe UI", 16), width=235, command=self.on_type_filter_changed)
         self.cb_type.grid(row=1, column=0, pady=(0, 5), sticky="w")
         self.cb_type.set("")
 
@@ -2421,31 +2459,28 @@ class App(ctk.CTk):
         # Column 2: Voucher Number
         lbl_voucher = ttk.Label(left_top_row, text="Voucher Number:", style="CardLabel.TLabel")
         lbl_voucher.grid(row=0, column=2, pady=(5, 2), sticky="w", padx=10)
-        self.ent_voucher = ctk.CTkEntry(left_top_row, font=("Segoe UI", 16), width=135)
+        self.ent_voucher = ctk.CTkEntry(left_top_row, font=("Segoe UI", 16), width=190)
         self.ent_voucher.grid(row=1, column=2, pady=(0, 5), sticky="w", padx=10)
 
         # Column 3: Source Ref
         lbl_source_ref = ttk.Label(left_top_row, text="Source Ref:", style="CardLabel.TLabel")
         lbl_source_ref.grid(row=0, column=3, pady=(5, 2), sticky="w", padx=10)
-        self.ent_source_ref = ctk.CTkEntry(left_top_row, font=("Segoe UI", 16), width=135)
+        self.ent_source_ref = ctk.CTkEntry(left_top_row, font=("Segoe UI", 16), width=190)
         self.ent_source_ref.grid(row=1, column=3, pady=(0, 5), sticky="w", padx=10)
 
         # ---- SECOND ROW ----
-        left_second_row = ctk.CTkFrame(left_half, fg_color="transparent")
-        left_second_row.grid(row=1, column=0, pady=(0, 10), sticky="ew")
-
         # Source Type
-        lbl_source_type = ttk.Label(left_second_row, text="Source Type:", style="CardLabel.TLabel")
-        lbl_source_type.grid(row=0, column=0, pady=(5, 2), sticky="w")
-        self.cb_source_type = ctk.CTkComboBox(left_second_row, font=("Segoe UI", 16), width=400)
-        self.cb_source_type.grid(row=1, column=0, pady=(0, 5), sticky="w", padx=(0, 20))
+        lbl_source_type = ttk.Label(left_top_row, text="Source Type:", style="CardLabel.TLabel")
+        lbl_source_type.grid(row=2, column=0, columnspan=2, pady=(5, 2), sticky="w")
+        self.cb_source_type = ctk.CTkComboBox(left_top_row, font=("Segoe UI", 16), width=400)
+        self.cb_source_type.grid(row=3, column=0, columnspan=2, pady=(0, 5), sticky="w", padx=(0, 20))
         self.cb_source_type.set("")
 
         # Ledger Category
-        lbl_ledger = ttk.Label(left_second_row, text="Ledger Category:", style="CardLabel.TLabel")
-        lbl_ledger.grid(row=0, column=1, pady=(5, 2), sticky="w")
-        self.cb_ledger = ctk.CTkComboBox(left_second_row, font=("Segoe UI", 16), width=400)
-        self.cb_ledger.grid(row=1, column=1, pady=(0, 5), sticky="w")
+        lbl_ledger = ttk.Label(left_top_row, text="Ledger Category:", style="CardLabel.TLabel")
+        lbl_ledger.grid(row=2, column=2, columnspan=2, pady=(5, 2), sticky="w", padx=10)
+        self.cb_ledger = ctk.CTkComboBox(left_top_row, font=("Segoe UI", 16), width=400)
+        self.cb_ledger.grid(row=3, column=2, columnspan=2, pady=(0, 5), sticky="w", padx=10)
         self.cb_ledger.set("")
 
         # Description
@@ -2480,7 +2515,7 @@ class App(ctk.CTk):
         self.btn_retrieve = ctk.CTkButton(btn_frame, text="Retrieve", fg_color=self.theme_colors["accent"], width=80, command=self.retrieve_transaction)
         self.btn_retrieve.pack(side="left", padx=10)
 
-        self.btn_clear = ctk.CTkButton(btn_frame, text="Clear", fg_color=self.theme_colors["accent"], width=80, command=self.clear_form)
+        self.btn_clear = ctk.CTkButton(btn_frame, text="Clear", fg_color=self.theme_colors["accent"], width=80, command=lambda: self.clear_form(full_clear=True))
         self.btn_clear.pack(side="left", padx=10)
 
         self.btn_print_voucher = ctk.CTkButton(btn_frame, text="Print Voucher", fg_color=self.theme_colors["accent"], width=110, command=self.print_voucher, state="disabled")
@@ -4492,11 +4527,14 @@ class TransactionsReportFrame(ctk.CTkFrame):
         filter_card = ctk.CTkFrame(top_scrollable_frame, fg_color=self.parent.theme_colors["card"], corner_radius=8, border_width=1, border_color=self.parent.theme_colors["border"])
         filter_card.grid(row=0, column=0, sticky="ew", pady=(20, 10), padx=10)
 
-        for col_idx in range(6):
-            filter_card.columnconfigure(col_idx, weight=1)
+        filter_card.columnconfigure(0, weight=0, minsize=160)
+        filter_card.columnconfigure(1, weight=0, minsize=160)
+        filter_card.columnconfigure(2, weight=0, minsize=140)
+        filter_card.columnconfigure(3, weight=0, minsize=320)
+        filter_card.columnconfigure(4, weight=1)
 
         lbl_filter_title = ttk.Label(filter_card, text="Filtering Criteria:", font=("Segoe UI", 14, "bold"), style="CardLabel.TLabel")
-        lbl_filter_title.grid(row=0, column=0, columnspan=6, sticky="w", padx=10, pady=(10, 5))
+        lbl_filter_title.grid(row=0, column=0, columnspan=5, sticky="w", padx=10, pady=(10, 5))
 
         lbl_date_from = ttk.Label(filter_card, text="Date From (DD-MM-YYYY):", style="CardLabel.TLabel")
         lbl_date_from.grid(row=1, column=0, padx=10, pady=(5, 2), sticky="w")
@@ -4508,13 +4546,13 @@ class TransactionsReportFrame(ctk.CTkFrame):
         lbl_type.grid(row=1, column=2, padx=10, pady=(5, 2), sticky="w")
 
         lbl_source = ttk.Label(filter_card, text="Source Type:", style="CardLabel.TLabel")
-        lbl_source.grid(row=3, column=0, columnspan=2, padx=10, pady=(10, 2), sticky="w")
+        lbl_source.grid(row=1, column=3, padx=10, pady=(5, 2), sticky="w")
 
         lbl_ledger = ttk.Label(filter_card, text="Ledger Category:", style="CardLabel.TLabel")
-        lbl_ledger.grid(row=3, column=2, columnspan=2, padx=10, pady=(10, 2), sticky="w")
+        lbl_ledger.grid(row=3, column=0, columnspan=3, padx=10, pady=(10, 2), sticky="w")
 
         lbl_fin_cat = ttk.Label(filter_card, text="Financial Report Category:", style="CardLabel.TLabel")
-        lbl_fin_cat.grid(row=3, column=4, columnspan=2, padx=10, pady=(10, 2), sticky="w")
+        lbl_fin_cat.grid(row=3, column=3, padx=10, pady=(10, 2), sticky="w")
 
         date_from_container = ctk.CTkFrame(filter_card, fg_color="transparent")
         date_from_container.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="w")
@@ -4535,15 +4573,15 @@ class TransactionsReportFrame(ctk.CTkFrame):
         self.cb_type.set("")
 
         self.cb_source_type = ctk.CTkComboBox(filter_card, values=[""] + self.parent.config_data.get("source_types", []), width=300)
-        self.cb_source_type.grid(row=4, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="w")
+        self.cb_source_type.grid(row=2, column=3, padx=10, pady=(0, 10), sticky="w")
         self.cb_source_type.set("")
 
         self.cb_ledger = ctk.CTkComboBox(filter_card, values=[""] + self.parent.config_data.get("ledgers", []), width=300)
-        self.cb_ledger.grid(row=4, column=2, columnspan=2, padx=10, pady=(0, 10), sticky="w")
+        self.cb_ledger.grid(row=4, column=0, columnspan=3, padx=10, pady=(0, 10), sticky="w")
         self.cb_ledger.set("")
 
         self.cb_fin_cat = ctk.CTkComboBox(filter_card, values=[""] + self.parent.config_data.get("fin_report_categories", []), width=300)
-        self.cb_fin_cat.grid(row=4, column=4, columnspan=2, padx=10, pady=(0, 10), sticky="w")
+        self.cb_fin_cat.grid(row=4, column=3, padx=10, pady=(0, 10), sticky="w")
         self.cb_fin_cat.set("")
 
         # Checkboxes Card for PDF columns
@@ -4627,6 +4665,8 @@ class TransactionsReportFrame(ctk.CTkFrame):
 
         self.btn_clear_filters = ctk.CTkButton(bottom_frame, text="Clear Filters", text_color="#ffffff", fg_color=self.parent.theme_colors["accent"], command=self.clear_filters)
         self.btn_clear_filters.pack(side="right", padx=5)
+        
+        self.update_grid_columns()
         
         # Load initial values
         self.load_data()
@@ -4758,12 +4798,17 @@ class TransactionsReportFrame(ctk.CTkFrame):
             rec_date = None
             if rec_date_str:
                 try:
-                    rec_date = datetime.strptime(rec_date_str, "%d/%m/%Y").date()
+                    rec_date = datetime.strptime(rec_date_str, "%d-%m-%Y").date()
                 except ValueError:
                     try:
-                        rec_date = datetime.strptime(rec_date_str, "%Y-%m-%d").date()
+                        rec_date = datetime.strptime(rec_date_str, "%d/%m/%Y").date()
                     except ValueError:
-                        pass
+                        try:
+                            rec_date = datetime.strptime(rec_date_str, "%Y-%m-%d").date()
+                        except ValueError:
+                            pass
+            
+            rec["_parsed_date"] = rec_date
             
             # Match rules
             if date_from and (not rec_date or rec_date < date_from):
@@ -4780,6 +4825,20 @@ class TransactionsReportFrame(ctk.CTkFrame):
                 continue
                 
             self.filtered_records.append(rec)
+            
+        def sort_key(rec):
+            d = rec.get("_parsed_date") or datetime.max.date()
+            try:
+                v = float(rec["voucher"])
+            except Exception:
+                v = float('inf')
+            try:
+                s = float(rec["source_ref"])
+            except Exception:
+                s = float('inf')
+            return (d, rec["type"].lower(), v, rec["source_type"].lower(), s)
+
+        self.filtered_records.sort(key=sort_key)
             
         for idx, rec in enumerate(self.filtered_records, 1):
             tag = "evenrow" if idx % 2 == 0 else "oddrow"
