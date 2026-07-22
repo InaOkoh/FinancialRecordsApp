@@ -1040,10 +1040,22 @@ class App(ctk.CTk):
             # Load TransactionEntries
             ws_trans = wb["TransactionEntries"]
             trans_records = []
+            
+            type_filter = ""
+            if hasattr(self, 'cb_type'):
+                try:
+                    if self.cb_type.winfo_exists():
+                        type_filter = self.cb_type.get()
+                except Exception:
+                    pass
+                    
             for row_idx in range(2, ws_trans.max_row + 1):
                 row_vals = [ws_trans.cell(row=row_idx, column=c).value for c in range(1, 10)]
                 
                 if all(val is None for val in row_vals):
+                    continue
+                    
+                if type_filter and str(row_vals[2]).strip() != type_filter:
                     continue
                 
                 if isinstance(row_vals[0], datetime):
@@ -1256,7 +1268,6 @@ class App(ctk.CTk):
             
             wb.save(self.current_workbook_path)
             
-            self.load_workbook_data()
             self.clear_form()
             
         except Exception as e:
@@ -1325,7 +1336,6 @@ class App(ctk.CTk):
                 
             wb.save(self.current_workbook_path)
             
-            self.load_workbook_data()
             self.clear_form()
             
         except Exception as e:
@@ -1361,7 +1371,6 @@ class App(ctk.CTk):
             
             wb.save(self.current_workbook_path)
             
-            self.load_workbook_data()
             self.clear_form()
             
         except Exception as e:
@@ -1377,6 +1386,8 @@ class App(ctk.CTk):
         self.ent_desc.delete(0, tk.END)
         self.cb_ledger.set("")
         self.ent_amount.delete(0, tk.END)
+        
+        self.load_workbook_data()
 
     def on_tree_select(self, event=None):
         """Enables the Print Voucher button if a row is selected and a workbook is open, otherwise disables it."""
@@ -2379,19 +2390,27 @@ class App(ctk.CTk):
         left_top_row = ctk.CTkFrame(left_half, fg_color="transparent")
         left_top_row.grid(row=0, column=0, pady=(0, 10), sticky="ew")
 
-        # Configure three columns for Date, Voucher Number, and Source Ref
-        left_top_row.columnconfigure(0, weight=0, minsize=160)
+        # Configure four columns for Type, Date, Voucher Number, and Source Ref
+        left_top_row.columnconfigure(0, weight=0, minsize=250)
         left_top_row.columnconfigure(1, weight=0, minsize=160)
         left_top_row.columnconfigure(2, weight=0, minsize=160)
+        left_top_row.columnconfigure(3, weight=0, minsize=160)
         # Dummy column to absorb extra space so fields cluster on the left
-        left_top_row.columnconfigure(3, weight=1)
+        left_top_row.columnconfigure(4, weight=1)
 
-        # Column 0: Date
+        # Column 0: Type
+        lbl_type = ttk.Label(left_top_row, text="Type:", style="CardLabel.TLabel")
+        lbl_type.grid(row=0, column=0, pady=(5, 2), sticky="w")
+        self.cb_type = ctk.CTkComboBox(left_top_row, font=("Segoe UI", 16), width=235, command=lambda val: self.load_workbook_data())
+        self.cb_type.grid(row=1, column=0, pady=(0, 5), sticky="w")
+        self.cb_type.set("")
+
+        # Column 1: Date
         lbl_date = ttk.Label(left_top_row, text="Date (DD-MM-YYYY):", style="CardLabel.TLabel")
-        lbl_date.grid(row=0, column=0, pady=(5, 2), sticky="w")
+        lbl_date.grid(row=0, column=1, pady=(5, 2), sticky="w", padx=(10, 0))
 
         date_container = ctk.CTkFrame(left_top_row, fg_color="transparent")
-        date_container.grid(row=1, column=0, pady=(0, 5), sticky="w")
+        date_container.grid(row=1, column=1, pady=(0, 5), sticky="w", padx=(10, 0))
 
         self.ent_date = ctk.CTkEntry(date_container, font=("Segoe UI", 16), width=125)
         self.ent_date.pack(side="left")
@@ -2399,52 +2418,51 @@ class App(ctk.CTk):
         self.btn_date_picker = ctk.CTkButton(date_container, text="📅", width=35, fg_color=self.theme_colors["accent"], command=self.pick_date)
         self.btn_date_picker.pack(side="left", padx=(5, 0))
 
-        # Column 1: Voucher Number
+        # Column 2: Voucher Number
         lbl_voucher = ttk.Label(left_top_row, text="Voucher Number:", style="CardLabel.TLabel")
-        lbl_voucher.grid(row=0, column=1, pady=(5, 2), sticky="w", padx=10)
+        lbl_voucher.grid(row=0, column=2, pady=(5, 2), sticky="w", padx=10)
         self.ent_voucher = ctk.CTkEntry(left_top_row, font=("Segoe UI", 16), width=135)
-        self.ent_voucher.grid(row=1, column=1, pady=(0, 5), sticky="w", padx=10)
+        self.ent_voucher.grid(row=1, column=2, pady=(0, 5), sticky="w", padx=10)
 
-        # Column 2: Source Ref
+        # Column 3: Source Ref
         lbl_source_ref = ttk.Label(left_top_row, text="Source Ref:", style="CardLabel.TLabel")
-        lbl_source_ref.grid(row=0, column=2, pady=(5, 2), sticky="w", padx=10)
+        lbl_source_ref.grid(row=0, column=3, pady=(5, 2), sticky="w", padx=10)
         self.ent_source_ref = ctk.CTkEntry(left_top_row, font=("Segoe UI", 16), width=135)
-        self.ent_source_ref.grid(row=1, column=2, pady=(0, 5), sticky="w", padx=10)
+        self.ent_source_ref.grid(row=1, column=3, pady=(0, 5), sticky="w", padx=10)
 
-        # Description
-        lbl_desc = ttk.Label(left_half, text="Description:", style="CardLabel.TLabel")
-        lbl_desc.grid(row=1, column=0, pady=(5, 2), sticky="w")
-        self.ent_desc = MultilineEntry(left_half, self, height=3, width=60, font=("Segoe UI", 15))
-        self.ent_desc.grid(row=2, column=0, pady=(0, 5), sticky="w")
-
-        # Amount (moved below description, width=15, aligned left)
-        lbl_amount = ttk.Label(left_half, text="Amount:", style="CardLabel.TLabel")
-        lbl_amount.grid(row=3, column=0, pady=(5, 2), sticky="w")
-        self.ent_amount = ctk.CTkEntry(left_half, font=("Segoe UI", 16), width=135)
-        self.ent_amount.grid(row=4, column=0, pady=(0, 5), sticky="w")
-        self.ent_amount.bind("<FocusOut>", self.format_amount_field)
-
-        # ---- RIGHT HALF FIELDS ----
-        # Type
-        lbl_type = ttk.Label(right_half, text="Type:", style="CardLabel.TLabel")
-        lbl_type.grid(row=0, column=0, pady=(5, 2), sticky="w")
-        self.cb_type = ctk.CTkComboBox(right_half, font=("Segoe UI", 16), width=400)
-        self.cb_type.grid(row=1, column=0, pady=(0, 10), sticky="w")
-        self.cb_type.set("")
+        # ---- SECOND ROW ----
+        left_second_row = ctk.CTkFrame(left_half, fg_color="transparent")
+        left_second_row.grid(row=1, column=0, pady=(0, 10), sticky="ew")
 
         # Source Type
-        lbl_source_type = ttk.Label(right_half, text="Source Type:", style="CardLabel.TLabel")
-        lbl_source_type.grid(row=2, column=0, pady=(5, 2), sticky="w")
-        self.cb_source_type = ctk.CTkComboBox(right_half, font=("Segoe UI", 16), width=400)
-        self.cb_source_type.grid(row=3, column=0, pady=(0, 10), sticky="w")
+        lbl_source_type = ttk.Label(left_second_row, text="Source Type:", style="CardLabel.TLabel")
+        lbl_source_type.grid(row=0, column=0, pady=(5, 2), sticky="w")
+        self.cb_source_type = ctk.CTkComboBox(left_second_row, font=("Segoe UI", 16), width=400)
+        self.cb_source_type.grid(row=1, column=0, pady=(0, 5), sticky="w", padx=(0, 20))
         self.cb_source_type.set("")
 
         # Ledger Category
-        lbl_ledger = ttk.Label(right_half, text="Ledger Category:", style="CardLabel.TLabel")
-        lbl_ledger.grid(row=4, column=0, pady=(5, 2), sticky="w")
-        self.cb_ledger = ctk.CTkComboBox(right_half, font=("Segoe UI", 16), width=400)
-        self.cb_ledger.grid(row=5, column=0, pady=(0, 10), sticky="w")
+        lbl_ledger = ttk.Label(left_second_row, text="Ledger Category:", style="CardLabel.TLabel")
+        lbl_ledger.grid(row=0, column=1, pady=(5, 2), sticky="w")
+        self.cb_ledger = ctk.CTkComboBox(left_second_row, font=("Segoe UI", 16), width=400)
+        self.cb_ledger.grid(row=1, column=1, pady=(0, 5), sticky="w")
         self.cb_ledger.set("")
+
+        # Description
+        lbl_desc = ttk.Label(left_half, text="Description:", style="CardLabel.TLabel")
+        lbl_desc.grid(row=2, column=0, pady=(5, 2), sticky="w")
+        self.ent_desc = MultilineEntry(left_half, self, height=3, width=60, font=("Segoe UI", 15))
+        self.ent_desc.grid(row=3, column=0, pady=(0, 5), sticky="w")
+
+        # Amount (moved below description, width=15, aligned left)
+        lbl_amount = ttk.Label(left_half, text="Amount:", style="CardLabel.TLabel")
+        lbl_amount.grid(row=4, column=0, pady=(5, 2), sticky="w")
+        self.ent_amount = ctk.CTkEntry(left_half, font=("Segoe UI", 16), width=135)
+        self.ent_amount.grid(row=5, column=0, pady=(0, 5), sticky="w")
+        self.ent_amount.bind("<FocusOut>", self.format_amount_field)
+
+        # ---- RIGHT HALF FIELDS ----
+        # (Fields moved to left side to accommodate width and layout requests)
 
         # Button Toolbar Container
         btn_frame = ctk.CTkFrame(self.transaction_tab, fg_color="transparent")
