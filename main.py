@@ -1122,7 +1122,7 @@ class App(ctk.CTk):
                 self.tree.insert(
                     "", 
                     tk.END, 
-                    values=(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9]),
+                    values=(r[0], r[1], r[3], r[2], r[4], r[5], r[6], r[7], r[8], r[9]),
                     tags=(row_tag,)
                 )
 
@@ -1297,8 +1297,8 @@ class App(ctk.CTk):
         self.clear_form()
         self.current_retrieved_excel_row_idx = int(vals[0])
         self.ent_date.insert(0, vals[1])
-        self.ent_voucher.insert(0, vals[2])
-        self.cb_type.set(vals[3])
+        self.ent_voucher.insert(0, vals[3])
+        self.cb_type.set(vals[2])
         self.cb_source_type.set(vals[4])
         self.ent_source_ref.insert(0, vals[5] if vals[5] is not None and vals[5] != "None" else "")
         self.ent_desc.insert(0, vals[6])
@@ -1371,7 +1371,7 @@ class App(ctk.CTk):
             
         tree_vals = self.tree.item(selected_item, "values")
         excel_row_idx = int(tree_vals[0])
-        voucher_num = tree_vals[2]
+        voucher_num = tree_vals[3]
         
         confirm = messagebox.askyesno(
             "Confirm Delete", 
@@ -1449,24 +1449,14 @@ class App(ctk.CTk):
         if not selected_vals:
             return
 
-        voucher_no = selected_vals[2]
-        
-        # Aggregate all matching items
-        matching_items = []
-        if voucher_no and str(voucher_no).strip():
-            for child_id in self.tree.get_children():
-                child_vals = self.tree.item(child_id, "values")
-                if child_vals[2] == voucher_no:
-                    matching_items.append(child_vals)
-        else:
-            matching_items.append(selected_vals)
-            
-        # Extract metadata from the first matched item
-        first_vals = matching_items[0]
-        date_val = first_vals[1]
-        type_val = first_vals[3]
-        source_val = first_vals[4]
-        source_ref = first_vals[5]
+        voucher_no = selected_vals[3]
+        # Ensure it contains only the selected transaction
+        matching_items = [selected_vals]
+        # Extract metadata from the selected item
+        date_val = selected_vals[1]
+        type_val = selected_vals[2]
+        source_val = selected_vals[4]
+        source_ref = selected_vals[5]
 
         if fpdf is None:
             messagebox.showerror(
@@ -1485,7 +1475,8 @@ class App(ctk.CTk):
             vouchers_dir = os.path.join(wb_dir, "vouchers")
         
         os.makedirs(vouchers_dir, exist_ok=True)
-        pdf_filename = f"Voucher_{voucher_no}.pdf"
+        safe_date = str(date_val).replace("/", "-").replace("\\", "-").replace(":", "-")
+        pdf_filename = f"{type_val}_{voucher_no}_{safe_date}.pdf"
         pdf_path = os.path.join(vouchers_dir, pdf_filename)
 
         try:
@@ -2526,7 +2517,7 @@ class App(ctk.CTk):
         grid_frame.rowconfigure(0, weight=1)
         grid_frame.columnconfigure(0, weight=1)
 
-        columns = ("No.", "Date", "Voucher Number", "Type", "Source Type", "Source Ref", "Description", "Ledger", "Financial Report Category", "Amount")
+        columns = ("No.", "Date", "Type", "Voucher Number", "Source Type", "Source Ref", "Description", "Ledger", "Financial Report Category", "Amount")
         self.tree = ttk.Treeview(grid_frame, columns=columns, show="headings", selectmode="browse")
         self.tree.configure(displaycolumns=[c for c in columns if c not in ("No.", "Financial Report Category")])
 
@@ -4596,8 +4587,8 @@ class TransactionsReportFrame(ctk.CTkFrame):
 
         columns_to_show = [
             ("date", "Date"),
-            ("voucher", "Voucher Number"),
             ("type", "Type"),
+            ("voucher", "Voucher Number"),
             ("source_type", "Source Type"),
             ("source_ref", "Source Ref"),
             ("desc", "Description"),
@@ -4619,7 +4610,7 @@ class TransactionsReportFrame(ctk.CTkFrame):
         grid_frame.rowconfigure(0, weight=1)
         grid_frame.columnconfigure(0, weight=1)
 
-        columns = ("No.", "Date", "Voucher Number", "Type", "Source Type", "Source Ref", "Description", "Ledger", "Financial Report Category", "Amount")
+        columns = ("No.", "Date", "Type", "Voucher Number", "Source Type", "Source Ref", "Description", "Ledger", "Financial Report Category", "Amount")
         self.tree = ttk.Treeview(grid_frame, columns=columns, show="headings", selectmode="none")
 
         for col in columns:
@@ -4680,8 +4671,8 @@ class TransactionsReportFrame(ctk.CTkFrame):
         display_cols = []
         col_mapping = {
             "date": "Date",
-            "voucher": "Voucher Number",
             "type": "Type",
+            "voucher": "Voucher Number",
             "source_type": "Source Type",
             "source_ref": "Source Ref",
             "desc": "Description",
@@ -4848,8 +4839,8 @@ class TransactionsReportFrame(ctk.CTkFrame):
                 values=(
                     idx,
                     rec["date"],
-                    rec["voucher"],
                     rec["type"],
+                    rec["voucher"],
                     rec["source_type"],
                     rec["source_ref"],
                     rec["desc"],
@@ -4906,8 +4897,8 @@ class TransactionsReportFrame(ctk.CTkFrame):
         selected_cols = [("sn", "S/N")]
         for col_key, col_title in [
             ("date", "Date"),
-            ("voucher", "Voucher No"),
             ("type", "Type"),
+            ("voucher", "Voucher No"),
             ("source_type", "Source Type"),
             ("source_ref", "Source Ref"),
             ("desc", "Description"),
